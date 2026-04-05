@@ -6,57 +6,53 @@ param(
     [string]$master
 )
 
-# Exit on error
 $ErrorActionPreference = "Stop"
 
-# Derive HTTP/S base URL from the WS/S master URL (supports both ws:// and wss://)
-$baseUrl = $master -replace "^ws(s)?://", 'http$1://'
+# Derive HTTP base URL from WS URL
+# e.g. wss://host/ws/agent -> https://host
+$baseUrl = $master
+if ($baseUrl -match "^wss://") {
+    $baseUrl = $baseUrl -replace "^wss://", "https://"
+} elseif ($baseUrl -match "^ws://") {
+    $baseUrl = $baseUrl -replace "^ws://", "http://"
+}
 $baseUrl = $baseUrl -replace "/ws/agent$", ""
 
-# Determine Architecture
-$arch = if ([System.Environment]::Is64BitOperatingSystem) { "amd64" } else { "386" }
+Write-Host "[Nexus] Base URL: $baseUrl"
 
-# In this phase, we only generate amd64 for Windows in Dockerfile
-$binUrl = "$baseUrl/downloads/nexus-agent-windows-amd64.exe"
+# Determine install dir
 $installDir = "C:\NexusAgent"
-$binPath = "$installDir\nexus-agent.exe"
+$binPath = $installDir + "\nexus-agent.exe"
+$binUrl = $baseUrl + "/downloads/nexus-agent-windows-amd64.exe"
 
-Write-Host "==> Detected: windows/$arch"
-Write-Host "==> Downloading nexus-agent from $binUrl"
-
+Write-Host "[Nexus] Creating directory: $installDir"
 if (!(Test-Path -Path $installDir)) {
     New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 }
 
-# Download the file
-Invoke-WebRequest -Uri $binUrl -OutFile $binPath
+Write-Host "[Nexus] Downloading agent from: $binUrl"
+Invoke-WebRequest -UseBasicParsing -Uri $binUrl -OutFile $binPath
 
-Write-Host "==> Enrolling with master at $baseUrl"
+Write-Host "[Nexus] Enrolling agent..."
+$enrollUrl = $baseUrl + "/api/v1/agent/enroll"
 $headers = @{
-    "Authorization" = "Bearer $token"
-    "Content-Type" = "application/json"
+    "Authorization" = "Bearer " + $token
+    "Content-Type"  = "application/json"
 }
 
 try {
-    Invoke-RestMethod -Uri "$baseUrl/api/v1/agent/enroll" -Method Post -Headers $headers -ErrorAction Stop | Out-Null
+    Invoke-RestMethod -Uri $enrollUrl -Method Post -Headers $headers -ErrorAction Stop | Out-Null
+    Write-Host "[Nexus] Enrollment successful."
 } catch {
-    Write-Host "Note: Enrollment returned a non-success code (could already be enrolled)."
+    Write-Host "[Nexus] Enrollment note: " + $_.Exception.Message
 }
 
-Write-Host "==> Installing nexus-agent as system service"
-
-# Install as Windows Service using the built-in kardianos/service arguments
-$installArgs = '-service install -master "' + $master + '" -token "' + $token + '"'
+Write-Host "[Nexus] Installing as Windows service..."
+$installArgs = "-service install -master """ + $master + """ -token """ + $token + """"
 Start-Process -FilePath $binPath -ArgumentList $installArgs -Wait -NoNewWindow
 
-# Start the service
-Write-Host "==> Starting nexus-agent service"
-$startArgs = "-service start"
-Start-Process -FilePath $binPath -ArgumentList $startArgs -Wait -NoNewWindow
+Write-Host "[Nexus] Starting service..."
+Start-Process -FilePath $binPath -ArgumentList "-service start" -Wait -NoNewWindow
 
-Write-Host ""
-Write-Host "✓ Nexus Agent installed and running on Windows."
-Write-Host "  Master  : $master"
-Write-Host "  Logs    : Consult Windows Event Viewer (Application Log) or Windows Services (services.msc)"
-
-# End of script
+Write-Host "[Nexus] Done! Agent is running."
+Write-Host "[Nexus] Check status in Windows Services (services.msc) or Event Viewer."
