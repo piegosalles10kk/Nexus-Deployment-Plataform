@@ -670,7 +670,7 @@ function ManualServerModal({ onClose }: { onClose: () => void }) {
       const wsUrl = `${wsProto}//${window.location.host}/ws/agent`;
       
       const bashCmd = `curl -sSL ${domain}/install.sh | sudo bash -s -- --token ${enrollToken} --master ${wsUrl}`;
-      const psCmd = `Invoke-WebRequest -Uri "${domain}/install.ps1" -OutFile "C:\\install.ps1"; & "C:\\install.ps1" -token "${enrollToken}" -master "${wsUrl}"`;
+      const psCmd = `Invoke-WebRequest -Uri "${domain}/install.ps1" -OutFile "C:\\install.ps1"; powershell.exe -ExecutionPolicy Bypass -File "C:\\install.ps1" -token "${enrollToken}" -master "${wsUrl}"`;
       
       setInstallCommandLinux(bashCmd);
       setInstallCommandWindows(psCmd);
