@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Derive HTTP/S base URL from the WS/S master URL (supports both ws:// and wss://)
-$baseUrl = $master -replace "^ws(s)?://", "http`$1://"
+$baseUrl = $master -replace "^ws(s)?://", 'http$1://'
 $baseUrl = $baseUrl -replace "/ws/agent$", ""
 
 # Determine Architecture
@@ -46,7 +46,7 @@ try {
 Write-Host "==> Installing nexus-agent as system service"
 
 # Install as Windows Service using the built-in kardianos/service arguments
-$installArgs = "-service install -master `"$master`" -token `"$token`""
+$installArgs = '-service install -master "' + $master + '" -token "' + $token + '"'
 Start-Process -FilePath $binPath -ArgumentList $installArgs -Wait -NoNewWindow
 
 # Start the service
