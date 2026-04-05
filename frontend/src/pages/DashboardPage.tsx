@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
-  FolderGit2, Cloud, Server, CheckCircle2, XCircle, PauseCircle,
+  FolderGit2, Cloud, CheckCircle2, XCircle, PauseCircle,
   GitCommit, FlaskConical, TrendingUp, Activity, Rocket, BarChart3,
   Plus, Loader2, Monitor, X, Globe, Zap, Wifi,
 } from 'lucide-react';
@@ -182,7 +182,6 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {projects.map((project, i) => {
               const status = statusConfig[project.status];
-              const StatusIcon = status.icon;
               const lastDeploy = project.deploys[0];
               const testsPassed = lastDeploy?.testsPassed ?? 0;
               const testsTotal = lastDeploy?.testsTotal ?? 0;

@@ -8,8 +8,8 @@ import {
   ArrowLeft, Activity, History, Terminal as TerminalIcon, Settings,
   Rocket, Loader2, CheckCircle2, XCircle, PauseCircle, GitCommit,
   FlaskConical, Clock, Trash2, Plus, Eye, EyeOff, Save, AlertCircle, X,
-  ChevronUp, ChevronDown, Monitor, Wifi, Info, Layers, Cpu, HardDrive,
-  Zap, RefreshCw,
+  ChevronUp, ChevronDown, Info, Layers, Cpu, HardDrive,
+  Zap, RefreshCw, Globe,
 } from 'lucide-react';
 import MetricsChart, { MetricPoint } from '../components/MetricsChart';
 
@@ -549,7 +549,7 @@ function InstancesTab({
                     <span className={`text-xs font-mono font-bold ${
                       live?.responseMs === null
                         ? 'text-text-muted'
-                        : live.responseMs > (project.scalingPolicy?.maxResponseMs ?? 2000)
+                        : (live?.responseMs ?? 0) > (project.scalingPolicy?.maxResponseMs ?? 2000)
                         ? 'text-danger'
                         : 'text-success'
                     }`}>
@@ -793,7 +793,7 @@ function LogsTab({ logs, deploying, logsEndRef }: {
               </div>
             );
           })}
-          <div ref={logsEndRef} className="h-2" />
+          <div ref={logsEndRef as any} className="h-2" />
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import {
   Cloud, Plus, Trash2, Server, Loader2, AlertCircle, CheckCircle2,
-  RefreshCw, X, Key, Globe, Cpu,
+  RefreshCw, X, Globe, Cpu,
 } from 'lucide-react';
 
 interface CloudProvider {
