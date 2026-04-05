@@ -3,6 +3,7 @@ import { prisma } from '../../config/database';
 import { discoverAvailablePorts } from './port-scan.service';
 import { env } from '../../config/env';
 import { getRedisClient } from '../../config/redis';
+import { reloadNginxGateway, isReservedPath } from '../../services/nginx-config.service';
 
 const generateRandomPath = (length = 8) => {
   return Math.random().toString(36).substring(2, 2 + length);
@@ -63,6 +64,11 @@ export const GatewayController = {
         finalPath = '/' + finalPath;
       }
 
+      // Protect reserved system paths
+      if (isReservedPath(finalPath)) {
+        return res.status(400).json({ message: `O caminho "${finalPath}" é reservado pelo sistema e não pode ser usado como rota de gateway.` });
+      }
+
       const route = await prisma.gatewayRoute.create({
         data: {
           name,
@@ -72,6 +78,9 @@ export const GatewayController = {
           isActive: finalIsActive,
         },
       });
+
+      // Sync Nginx config
+      await reloadNginxGateway();
 
       res.status(201).json(route);
     } catch (error: any) {
@@ -93,6 +102,11 @@ export const GatewayController = {
 
       const portNumber = parseInt(checkPort, 10) || 0;
 
+      // Protect reserved system paths
+      if (routePath && isReservedPath(routePath)) {
+        return res.status(400).json({ message: `O caminho "${routePath}" é reservado pelo sistema.` });
+      }
+
       const route = await prisma.gatewayRoute.update({
         where: { id },
         data: {
@@ -103,6 +117,9 @@ export const GatewayController = {
           isActive,
         },
       });
+
+      // Sync Nginx config
+      await reloadNginxGateway();
 
       res.json(route);
     } catch (error) {
@@ -118,6 +135,10 @@ export const GatewayController = {
     try {
       const id = req.params.id as string;
       await prisma.gatewayRoute.delete({ where: { id } });
+
+      // Sync Nginx config
+      await reloadNginxGateway();
+
       res.json({ message: 'Rota removida com sucesso' });
     } catch (error) {
       console.error('Error deleting gateway route:', error);

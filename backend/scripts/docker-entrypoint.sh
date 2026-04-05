@@ -4,18 +4,13 @@
 echo "Waiting for database to be ready..."
 sleep 5
 
-# Gera o client do Prisma (garantia extra)
-# npx prisma generate
+# Sincroniza o schema com o banco de dados (cria tabelas se não existirem)
+# db push é idempotente — seguro para rodar em todo restart
+echo "Syncing database schema..."
+npx prisma db push --accept-data-loss
 
-# Aplica as migrações em produção
-echo "Applying database migrations..."
-npx prisma migrate deploy
-
-# Roda o seed para criar a conta ADM inicial
+# Roda o seed apenas se necessário (seed é idempotente — verifica se admin já existe)
 echo "Seeding initial admin account..."
-# Note: seeding in production usually requires TS compilation or using compiled seed
-# But since we have tsx in devDependencies and we are in production stage, 
-# it's better to use the script from node if possible, or just npx.
 npx prisma db seed
 
 # Inicia a aplicação

@@ -1,21 +1,32 @@
-# Build stage
+# Stage 1: Build Go agent (linux/amd64 and linux/arm64)
+FROM golang:1.21-alpine AS agent-builder
+
+WORKDIR /agent
+COPY agent/go.mod agent/go.sum ./
+RUN go mod download
+
+COPY agent/ ./
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o nexus-agent-linux-amd64 ./cmd/agent
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o nexus-agent-linux-arm64 ./cmd/agent
+
+# Stage 2: Build Node.js backend
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-COPY prisma ./prisma/
+COPY backend/package*.json ./
+COPY backend/prisma ./prisma/
 
 RUN apk add --no-cache python3 make g++ 
 
 RUN npm install
 
-COPY . .
+COPY backend/ .
 
 RUN npx prisma generate
 RUN npm run build
 
-# Production stage
+# Stage 3: Production image
 FROM node:20-alpine
 
 WORKDIR /app
@@ -32,7 +43,15 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
 
-COPY scripts/docker-entrypoint.sh /app/scripts/docker-entrypoint.sh
+# Copy agent binaries and install script to be served as static files
+COPY --from=agent-builder /agent/nexus-agent-linux-amd64 ./public/downloads/nexus-agent-linux-amd64
+COPY --from=agent-builder /agent/nexus-agent-linux-arm64 ./public/downloads/nexus-agent-linux-arm64
+COPY agent/scripts/install.sh ./public/install.sh
+RUN chmod +x ./public/downloads/nexus-agent-linux-amd64 \
+             ./public/downloads/nexus-agent-linux-arm64 \
+             ./public/install.sh
+
+COPY backend/scripts/docker-entrypoint.sh /app/scripts/docker-entrypoint.sh
 RUN chmod +x /app/scripts/docker-entrypoint.sh
 
 EXPOSE 4500

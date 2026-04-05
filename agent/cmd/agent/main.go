@@ -21,9 +21,9 @@ func main() {
 
 	// Service configuration for kardianos/service
 	svcConfig := &service.Config{
-		Name:        "10kk-agent",
-		DisplayName: "10KK Platform Agent",
-		Description: "Connects this host to the 10KK Platform for CI/CD orchestration and monitoring.",
+		Name:        "nexus-agent",
+		DisplayName: "Nexus Platform Agent",
+		Description: "Connects this host to the Nexus Platform for CI/CD orchestration and monitoring.",
 	}
 
 	// Pass master URL and token into the app via env (persisted by -install)

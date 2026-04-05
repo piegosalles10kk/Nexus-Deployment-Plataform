@@ -363,6 +363,7 @@ function ServerCard({
   onDeleted: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const cfg = statusConfig[server.status];
 
   const handleDelete = async () => {
@@ -370,7 +371,9 @@ function ServerCard({
     setDeleting(true);
     try {
       await api.delete(`/cloud/providers/${providerId}/servers/${server.id}`);
-      onDeleted();
+      // Trigger exit animation, then notify parent
+      setRemoving(true);
+      setTimeout(() => onDeleted(), 400);
     } catch (err: any) {
       alert(err.response?.data?.message || 'Falha ao destruir servidor.');
       setDeleting(false);
@@ -378,7 +381,16 @@ function ServerCard({
   };
 
   return (
-    <div className="bg-bg-card border border-border rounded-lg p-4 flex items-start justify-between gap-4">
+    <div
+      className="bg-bg-card border border-border rounded-lg p-4 flex items-start justify-between gap-4"
+      style={{
+        transition: 'opacity 0.35s ease, transform 0.35s ease, max-height 0.4s ease',
+        opacity: removing ? 0 : 1,
+        transform: removing ? 'scale(0.95) translateY(-4px)' : 'scale(1) translateY(0)',
+        maxHeight: removing ? '0px' : '200px',
+        overflow: 'hidden',
+      }}
+    >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-1">
           <div className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
@@ -442,10 +454,28 @@ function ProviderCard({
     }
   };
 
+  const silentRefresh = async () => {
+    try {
+      const res = await api.get(`/cloud/providers/${provider.id}/servers`);
+      setServers(res.data.data.servers);
+    } catch { /* silent */ }
+  };
+
   const toggleExpand = () => {
     if (!expanded) loadServers();
     setExpanded((v) => !v);
   };
+
+  // Auto-poll every 10s when expanded — stops when all servers are stable
+  useEffect(() => {
+    if (!expanded) return;
+    const hasUnstable = servers.some(
+      (s) => s.status === 'PROVISIONING' || s.status === 'STOPPED',
+    );
+    if (!hasUnstable && servers.length > 0) return; // all stable, no need to poll
+    const interval = setInterval(silentRefresh, 10_000);
+    return () => clearInterval(interval);
+  }, [expanded, servers]);
 
   const deleteProvider = async () => {
     if (!confirm(`Remover o provider "${provider.name}"? Todos os servidores associados serão removidos do banco.`)) return;
@@ -456,6 +486,10 @@ function ProviderCard({
       alert(err.response?.data?.message || 'Falha ao remover provider.');
     }
   };
+
+  const unstableCount = servers.filter(
+    (s) => s.status === 'PROVISIONING' || s.status === 'STOPPED',
+  ).length;
 
   return (
     <>
@@ -480,9 +514,12 @@ function ProviderCard({
             </button>
             <button
               onClick={toggleExpand}
-              className="px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-bg-card-hover text-xs font-semibold transition-colors"
+              className="relative px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-bg-card-hover text-xs font-semibold transition-colors"
             >
               {expanded ? 'Recolher' : 'Servidores'}
+              {expanded && unstableCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-warning animate-pulse" />
+              )}
             </button>
             <button
               onClick={deleteProvider}
@@ -496,7 +533,7 @@ function ProviderCard({
         {/* Servers list */}
         {expanded && (
           <div className="border-t border-border p-4 space-y-3 bg-bg-primary">
-            {loadingServers ? (
+            {loadingServers && servers.length === 0 ? (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="w-5 h-5 text-accent animate-spin" />
               </div>
@@ -512,12 +549,20 @@ function ProviderCard({
                 />
               ))
             )}
-            <button
-              onClick={loadServers}
-              className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
-            >
-              <RefreshCw className="w-3 h-3" /> Atualizar lista
-            </button>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={loadServers}
+                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
+              >
+                <RefreshCw className={`w-3 h-3 ${loadingServers ? 'animate-spin' : ''}`} /> Atualizar lista
+              </button>
+              {unstableCount > 0 && (
+                <span className="text-xs text-warning flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Atualizando automaticamente…
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -584,8 +629,8 @@ export default function CloudPage() {
         <ol className="list-decimal list-inside space-y-1 ml-1">
           <li>Adicione um provider com suas credenciais de API (criptografadas em AES-256).</li>
           <li>Clique em <strong>Provisionar</strong> — o backend executa <code className="text-accent-light">terraform apply</code> criando a VPS.</li>
-          <li>O cloud-init instala Docker + 10KK Agent automaticamente na VPS.</li>
-          <li>O 10KK Agent se conecta de volta à plataforma via SSH reverso para receber comandos de deploy.</li>
+          <li>O cloud-init instala Docker + Nexus Agent automaticamente na VPS.</li>
+          <li>O Nexus Agent se conecta de volta à plataforma via WebSocket para receber comandos de deploy.</li>
         </ol>
         <p className="text-warning font-semibold pt-1">⚠️ Requer a CLI do Terraform instalada no servidor da plataforma.</p>
       </div>

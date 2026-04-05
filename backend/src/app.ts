@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import http from 'http';
+import path from 'path';
 import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 
@@ -22,10 +23,10 @@ import gatewayRoutes from './modules/gateway/gateway.routes';
 import cloudRoutes from './modules/cloud/cloud.routes';
 import agentRoutes from './modules/agent/agent.routes';
 import { startAgentWsServer } from './services/agent-ws.service';
-import { dynamicProxy } from './modules/gateway/proxy.service';
 import { trafficManager } from './modules/gateway/traffic.middleware';
 import { startMonitoring, stopMonitoring } from './services/monitoring.service';
 import { startDockerWatcher } from './services/docker-watcher.service';
+import { initGatewayConf } from './services/nginx-config.service';
 
 export function createApp() {
   const app = express();
@@ -86,9 +87,14 @@ export function createApp() {
   // Start Docker events watcher (auto-register gateway routes via labels)
   startDockerWatcher();
 
-  // Start mTLS WebSocket server for agent connections (port AGENT_WS_PORT, default 8443)
+  // Start mTLS WebSocket server for agent connections
   startAgentWsServer(io).catch((err) =>
     console.error('Failed to start agent WS server:', err.message),
+  );
+
+  // Sync gateway routes into Nginx config on startup
+  initGatewayConf().catch((err) =>
+    console.error('Failed to init gateway config:', err.message),
   );
 
   // Global middlewares
@@ -110,6 +116,14 @@ export function createApp() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Serve agent install script and binaries for remote VM provisioning
+  const publicDir = path.join(__dirname, '..', 'public');
+  app.use('/downloads', express.static(path.join(publicDir, 'downloads')));
+  app.get('/install.sh', (_req, res) => {
+    res.setHeader('Content-Type', 'text/plain');
+    res.sendFile(path.join(publicDir, 'install.sh'));
+  });
+
   // API routes
   app.use('/api/auth', authRoutes);
   app.use('/api/users', usersRoutes);
@@ -122,9 +136,6 @@ export function createApp() {
   app.use('/api/cloud', cloudRoutes);
   app.use('/api/v1/agent', agentRoutes);
   app.use('/webhook', webhookRoutes);
-
-  // Fallback: Dynamic Proxy Gateway
-  app.use(dynamicProxy);
 
   // Error handler (must be last)
   app.use(errorHandler);

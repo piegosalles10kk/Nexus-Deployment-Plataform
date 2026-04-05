@@ -36,8 +36,8 @@ export DEBIAN_FRONTEND=noninteractive
 curl -fsSL https://get.docker.com | bash
 systemctl enable --now docker
 
-# ── Install 10KK Agent ──────────────────────────────────────────────────────────
-mkdir -p /opt/10kk-agent
+# ── Install Nexus Agent ──────────────────────────────────────────────────────
+mkdir -p /opt/nexus-agent
 
 # Detect architecture
 ARCH=$(uname -m)
@@ -48,16 +48,16 @@ case "$ARCH" in
 esac
 
 # Download install script + binary from the platform
-curl -fsSL "${base}/install.sh" -o /tmp/10kk-install.sh
-chmod +x /tmp/10kk-install.sh
+curl -fsSL "${base}/install.sh" -o /tmp/nexus-install.sh
+chmod +x /tmp/nexus-install.sh
 
 # Run installer — it places the binary, creates systemd unit and starts the service
-/tmp/10kk-install.sh \\
+/tmp/nexus-install.sh \\
   --token  "${enrollmentToken}" \\
   --master "${wssUrl}" \\
   --arch   "$ARCH_SUFFIX"
 
-echo "[10KK] Agent installation complete."
+echo "[Nexus] Agent installation complete."
 `;
 }
 
@@ -257,10 +257,10 @@ resource "google_compute_instance" "vm" {
 ${cloudInit}
 EOT
 
-  tags = ["10kk-managed"]
+  tags = ["nexus-managed"]
 
   labels = {
-    managed-by = "10kk-platform"
+    managed-by = "nexus-platform"
   }
 }
 
