@@ -266,3 +266,29 @@ export async function getServerStatus(
     res.json({ status: 'success', data: { server } });
   } catch (err) { next(err); }
 }
+
+export async function restartServer(
+  req: Request<{ providerId: string; serverId: string }>,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const { serverId } = req.params;
+    const server = await db.cloudServer.findUnique({ where: { id: serverId } });
+    if (!server) { res.status(404).json({ status: 'error', message: 'Servidor não encontrado.' }); return; }
+
+    const { getSetting } = await import('../../services/settings.service');
+    const nodeId = await getSetting(`NODE_ID_${serverId}`);
+
+    if (nodeId) {
+      const { getAgentSocket } = await import('../../services/agent-ws.service');
+      const ws = getAgentSocket(nodeId);
+      if (ws && ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({ type: 'reboot' }));
+        return res.json({ status: 'success', message: 'Comando de reinício enviado ao servidor via agente.' });
+      }
+    }
+
+    res.json({ status: 'success', message: 'Reinício simulado. O Agente Nexus não está conectado no momento.' });
+  } catch (err) { next(err); }
+}

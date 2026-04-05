@@ -5,7 +5,8 @@ let socket: Socket | null = null;
 export function getSocket(): Socket {
   if (!socket) {
     const token = localStorage.getItem('token');
-    socket = io('http://localhost:4500', {
+    const socketUrl = window.location.origin;
+    socket = io(socketUrl, {
       auth: { token },
       autoConnect: false,
     });

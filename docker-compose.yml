@@ -63,6 +63,7 @@ services:
       - .env
     environment:
       - GATEWAY_CONF_PATH=/shared/gateway.conf
+      - DOCKER_HOST=tcp://10kk-docker-proxy:2375
     volumes:
       - gateway_conf:/shared
     depends_on:

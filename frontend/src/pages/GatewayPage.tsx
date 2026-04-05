@@ -245,7 +245,7 @@ const GatewayPage: React.FC = () => {
                       </td>
                       <td className="px-6 py-4">
                         <a 
-                          href={`http://localhost:4500${route.routePath}`} 
+                          href={`${window.location.origin}${route.routePath}`} 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="px-3 py-1 bg-zinc-800 hover:bg-blue-600/20 rounded-lg text-blue-300 font-mono text-[11px] border border-zinc-700 hover:border-blue-500/50 font-bold tracking-tight transition-all block w-max cursor-pointer"

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import {
   Cloud, Plus, Trash2, Server, Loader2, AlertCircle, CheckCircle2,
-  RefreshCw, X, Globe, Cpu,
+  RefreshCw, X, Globe, Cpu, RotateCw, Copy, Check
 } from 'lucide-react';
 
 interface CloudProvider {
@@ -363,7 +363,9 @@ function ServerCard({
   onDeleted: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [copied, setCopied] = useState(false);
   const cfg = statusConfig[server.status];
 
   const handleDelete = async () => {
@@ -380,51 +382,112 @@ function ServerCard({
     }
   };
 
+  const handleRestart = async () => {
+    if (!confirm(`Reiniciar o servidor "${server.name}"?`)) return;
+    setRestarting(true);
+    try {
+      const res = await api.post(`/cloud/providers/${providerId}/servers/${server.id}/restart`);
+      alert(res.data.message);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Falha ao reiniciar servidor.');
+    } finally {
+      setRestarting(false);
+    }
+  };
+
+  const copyIp = () => {
+    if (!server.ip) return;
+    navigator.clipboard.writeText(server.ip);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div
-      className="bg-bg-card border border-border rounded-lg p-4 flex items-start justify-between gap-4"
+      className="bg-bg-card border border-border rounded-xl p-5 flex items-center justify-between gap-4 group hover:border-border/80 transition-colors"
       style={{
-        transition: 'opacity 0.35s ease, transform 0.35s ease, max-height 0.4s ease',
+        transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
         opacity: removing ? 0 : 1,
         transform: removing ? 'scale(0.95) translateY(-4px)' : 'scale(1) translateY(0)',
-        maxHeight: removing ? '0px' : '200px',
+        maxHeight: removing ? '0px' : '300px',
         overflow: 'hidden',
+        paddingTop: removing ? '0px' : undefined,
+        paddingBottom: removing ? '0px' : undefined,
+        borderWidth: removing ? '0px' : undefined,
+        marginTop: removing ? '0px' : undefined,
+        marginBottom: removing ? '0px' : undefined,
       }}
     >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 mb-1">
-          <div className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
-          <p className="text-sm font-bold text-text-primary truncate">{server.name}</p>
-          <span className={`text-xs font-semibold ${cfg.color}`}>{cfg.label}</span>
+      <div className="flex items-center gap-5 min-w-0 flex-1">
+        {/* OS Icon box */}
+        <div 
+          className="w-12 h-12 rounded-full bg-gradient-to-br from-[#E95420]/10 to-[#E95420]/5 border border-[#E95420]/20 flex items-center justify-center shrink-0"
+          title="Ubuntu Linux"
+        >
+          <span className="text-[#E95420] font-black text-[10px] tracking-[0.2em] uppercase origin-center transform -rotate-90 block">Ubu</span>
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
-          <span className="flex items-center gap-1"><Globe className="w-3 h-3" />{server.region}</span>
-          <span className="flex items-center gap-1"><Cpu className="w-3 h-3" />{server.instanceType}</span>
-          {server.ip && <span className="flex items-center gap-1 font-mono text-accent-light">{server.ip}</span>}
-          {server.agentConnected && (
-            <span className="flex items-center gap-1 text-success">
-              <CheckCircle2 className="w-3 h-3" /> Agente v{server.agentVersion ?? '—'}
-            </span>
+        
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-3 mb-1.5">
+            <p className="text-base font-bold text-text-primary truncate">{server.name}</p>
+            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border border-border/50 text-[10px] font-bold uppercase tracking-widest ${cfg.color} bg-bg-primary shadow-sm`}>
+               <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+               {cfg.label}
+            </div>
+            {server.agentConnected && (
+              <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20 shadow-sm">
+                <CheckCircle2 className="w-3 h-3" /> Agent Online
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-text-muted">
+            <span className="flex items-center gap-1.5 font-medium"><Globe className="w-3.5 h-3.5 opacity-60" />{server.region}</span>
+            <span className="flex items-center gap-1.5 font-medium"><Cpu className="w-3.5 h-3.5 opacity-60" />{server.instanceType}</span>
+            {server.ip && (
+              <button 
+                onClick={copyIp}
+                title="Copiar Endereço IP"
+                className="flex items-center gap-2 text-text-secondary hover:text-accent-light transition-colors font-mono tracking-tight bg-bg-secondary hover:bg-accent/10 px-2 py-0.5 rounded-md border border-border hover:border-accent/30 group/ip"
+              >
+                {server.ip} {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3 h-3 opacity-40 group-hover/ip:opacity-100" />}
+              </button>
+            )}
+            {server.agentConnected && server.agentVersion && (
+              <span className="text-[10px] font-mono opacity-50 bg-bg-secondary px-1.5 rounded">v{server.agentVersion}</span>
+            )}
+          </div>
+          {server.status === 'ERROR' && server.lastError && (
+            <details className="mt-3">
+              <summary className="text-xs text-danger font-semibold cursor-pointer select-none hover:underline inline-flex items-center gap-1 bg-danger/10 px-2 py-1 rounded-md">
+                <AlertCircle className="w-3 h-3" /> Detalhes do erro de provisionamento
+              </summary>
+              <pre className="mt-2 p-3 rounded-lg bg-danger/5 border border-danger/20 text-[11px] text-danger/90 font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto w-full">
+                {server.lastError}
+              </pre>
+            </details>
           )}
         </div>
-        {server.status === 'ERROR' && server.lastError && (
-          <details className="mt-2">
-            <summary className="text-xs text-danger cursor-pointer select-none hover:underline">
-              Ver erro de provisionamento
-            </summary>
-            <pre className="mt-1 p-2 rounded bg-danger/8 border border-danger/20 text-xs text-danger font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
-              {server.lastError}
-            </pre>
-          </details>
-        )}
       </div>
-      <button
-        onClick={handleDelete}
-        disabled={deleting}
-        className="p-1.5 rounded-md border border-danger/20 text-danger/60 hover:text-danger hover:bg-danger/8 shrink-0 transition-colors disabled:opacity-40"
-      >
-        {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-      </button>
+      
+      {/* Actions */}
+      <div className="flex flex-col sm:flex-row items-center gap-2 opacity-100 sm:opacity-50 group-hover:opacity-100 transition-opacity shrink-0">
+         <button
+            onClick={handleRestart}
+            disabled={restarting || server.status !== 'RUNNING'}
+            title="Reiniciar servidor"
+            className="p-2.5 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-bg-card-hover transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+         >
+            <RotateCw className={`w-4 h-4 ${restarting ? 'animate-spin text-accent' : ''}`} />
+         </button>
+         <button
+            onClick={handleDelete}
+            disabled={deleting}
+            title="Destruir servidor"
+            className="p-2.5 rounded-lg border border-danger/20 text-danger/60 hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+         >
+            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+         </button>
+      </div>
     </div>
   );
 }

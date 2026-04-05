@@ -19,6 +19,7 @@ router.delete('/providers/:id', cloudController.deleteProvider);
 router.get('/providers/:providerId/servers', cloudController.listServers);
 router.post('/providers/:providerId/servers', cloudController.provisionNewServer);
 router.get('/providers/:providerId/servers/:serverId', cloudController.getServerStatus);
+router.post('/providers/:providerId/servers/:serverId/restart', cloudController.restartServer);
 router.delete('/providers/:providerId/servers/:serverId', cloudController.deleteServer);
 
 export default router;
