@@ -1,0 +1,103 @@
+services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: 10kk-docker-proxy
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - CONTAINERS_CREATE=1
+      - CONTAINERS_START=1
+      - CONTAINERS_DELETE=1
+      - IMAGES=1
+      - IMAGES_CREATE=1
+      - NETWORKS=1
+      - VOLUMES=1
+      - EVENTS=1
+      - INFO=1
+      - PING=1
+      - VERSION=1
+      - EXEC=1
+      - EXEC_START=1
+      - EXEC_CREATE=1
+      - POST=1
+      - DELETE=1
+    networks:
+      - 10kk-proxy-net
+
+  cicd-postgres:
+    image: postgres:16-alpine
+    container_name: 10kk-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: cicd
+      POSTGRES_PASSWORD: cicd_pass
+      POSTGRES_DB: cicd_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - 10kk-network
+
+  cicd-redis:
+    image: redis:7-alpine
+    container_name: 10kk-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - 10kk-network
+
+  cicd-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: 10kk-backend
+    ports:
+      - "4500:4500"
+    environment:
+      - DATABASE_URL=postgresql://cicd:cicd_pass@10kk-postgres:5432/cicd_db
+      - REDIS_URL=redis://10kk-redis:6379
+      - PORT=4500
+      - NODE_ENV=production
+      - JWT_SECRET=a1328bdca9c6b97e1aa18e9f386e22ee
+      - GITHUB_WEBHOOK_SECRET=b95b3e3daa4d291db2758b72f7d753d7
+      - ENCRYPTION_KEY=e1357eaa3a1ca199d708b9580f0c40811316b1df6e55d5404248c3360cfb2713
+      - PORT_CHECK_HOST=host.docker.internal
+      - DOCKER_PROXY_HOST=tcp://docker-proxy:2375
+    depends_on:
+      - cicd-postgres
+      - cicd-redis
+      - docker-proxy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - 10kk-network
+      - 10kk-lb-net
+      - 10kk-proxy-net
+
+  cicd-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: 10kk-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:4500/api
+    depends_on:
+      - cicd-backend
+    networks:
+      - 10kk-network
+
+networks:
+  10kk-network:
+    driver: bridge
+  10kk-lb-net:
+    driver: bridge
+  10kk-proxy-net:
+    driver: bridge
+
+volumes:
+  postgres_data:

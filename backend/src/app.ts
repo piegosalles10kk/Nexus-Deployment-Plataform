@@ -1,0 +1,133 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import http from 'http';
+import { Server as SocketServer } from 'socket.io';
+import jwt from 'jsonwebtoken';
+
+import { env } from './config/env';
+import { errorHandler } from './middlewares/error-handler';
+
+// Route imports
+import authRoutes from './modules/auth/auth.routes';
+import usersRoutes from './modules/users/users.routes';
+import projectsRoutes from './modules/projects/projects.routes';
+import secretsRoutes from './modules/secrets/secrets.routes';
+import deploysRoutes from './modules/deploys/deploys.routes';
+import webhookRoutes from './modules/webhook/webhook.routes';
+import settingsRoutes from './modules/settings/settings.routes';
+import lbRoutes from './modules/lb/lb.routes';
+import gatewayRoutes from './modules/gateway/gateway.routes';
+import cloudRoutes from './modules/cloud/cloud.routes';
+import agentRoutes from './modules/agent/agent.routes';
+import { startAgentWsServer } from './services/agent-ws.service';
+import { dynamicProxy } from './modules/gateway/proxy.service';
+import { trafficManager } from './modules/gateway/traffic.middleware';
+import { startMonitoring, stopMonitoring } from './services/monitoring.service';
+import { startDockerWatcher } from './services/docker-watcher.service';
+
+export function createApp() {
+  const app = express();
+  const server = http.createServer(app);
+
+  // Socket.io setup
+  const io = new SocketServer(server, {
+    cors: {
+      origin: env.FRONTEND_URL,
+      methods: ['GET', 'POST'],
+      credentials: true,
+    },
+  });
+
+  // Socket.io auth middleware
+  io.use((socket, next) => {
+    const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      return next(new Error('Authentication required'));
+    }
+
+    try {
+      const decoded = jwt.verify(token, env.JWT_SECRET);
+      (socket as any).user = decoded;
+      next();
+    } catch {
+      return next(new Error('Invalid token'));
+    }
+  });
+
+  // Socket.io connection handler
+  io.on('connection', (socket) => {
+    const user = (socket as any).user;
+    console.log(`🔌 Socket connected: ${user.name} (${user.role})`);
+
+    // Join project-specific rooms
+    socket.on('join:project', (projectId: string) => {
+      socket.join(`project:${projectId}`);
+      console.log(`   → ${user.name} joined project room: ${projectId}`);
+    });
+
+    socket.on('leave:project', (projectId: string) => {
+      socket.leave(`project:${projectId}`);
+    });
+
+    socket.on('disconnect', () => {
+      console.log(`🔌 Socket disconnected: ${user.name}`);
+    });
+  });
+
+  // Store io instance for use in controllers
+  app.set('io', io);
+
+  // Start container monitoring loop
+  startMonitoring(io);
+
+  // Start Docker events watcher (auto-register gateway routes via labels)
+  startDockerWatcher();
+
+  // Start mTLS WebSocket server for agent connections (port AGENT_WS_PORT, default 8443)
+  startAgentWsServer(io).catch((err) =>
+    console.error('Failed to start agent WS server:', err.message),
+  );
+
+  // Global middlewares
+  app.use(helmet());
+  app.use(cors({
+    origin: env.FRONTEND_URL,
+    credentials: true,
+  }));
+  app.use(morgan('dev'));
+  
+  // Traffic Management (Rate Limit, Throttling, Circuit Breaker)
+  app.use(trafficManager());
+
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
+  // Health check
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // API routes
+  app.use('/api/auth', authRoutes);
+  app.use('/api/users', usersRoutes);
+  app.use('/api/projects', projectsRoutes);
+  app.use('/api', secretsRoutes);  // /api/projects/:id/secrets & /api/secrets/:id
+  app.use('/api', deploysRoutes);  // /api/projects/:id/deploys & /api/deploys/:id
+  app.use('/api/settings', settingsRoutes);
+  app.use('/api/projects', lbRoutes);
+  app.use('/api/gateway', gatewayRoutes);
+  app.use('/api/cloud', cloudRoutes);
+  app.use('/api/v1/agent', agentRoutes);
+  app.use('/webhook', webhookRoutes);
+
+  // Fallback: Dynamic Proxy Gateway
+  app.use(dynamicProxy);
+
+  // Error handler (must be last)
+  app.use(errorHandler);
+
+  return { app, server, io };
+}
