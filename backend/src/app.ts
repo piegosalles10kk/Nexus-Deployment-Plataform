@@ -142,6 +142,10 @@ export function createApp() {
     res.setHeader('Content-Type', 'text/plain');
     res.sendFile(path.join(publicDir, 'install.sh'));
   });
+  app.get('/install.ps1', (_req, res) => {
+    res.setHeader('Content-Type', 'text/plain');
+    res.sendFile(path.join(publicDir, 'install.ps1'));
+  });
 
   // API routes
   app.use('/api/auth', authRoutes);
