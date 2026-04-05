@@ -119,6 +119,14 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
           io.emit('agent:log', { nodeId, containerId: msg.container_id, line: msg.data });
           break;
 
+        case 'shell_output':
+          io.to(`server:${nodeId}`).emit('agent:shell_output', { sessionId: msg.sessionId, message: msg.message });
+          break;
+
+        case 'shell_exit':
+          io.to(`server:${nodeId}`).emit('agent:shell_exit', { sessionId: msg.sessionId, code: msg.code });
+          break;
+
         case 'route_register': {
           // Agent finished a deploy and is registering the gateway route for the container
           const routePath = `/${msg.host}`;

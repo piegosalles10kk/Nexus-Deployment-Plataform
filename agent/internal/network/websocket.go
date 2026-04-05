@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/10kk/agent/internal/docker"
@@ -28,6 +29,8 @@ type inboundMsg struct {
 	ContainerID string            `json:"container_id,omitempty"`
 	UpdateURL   string            `json:"url,omitempty"`
 	Version     string            `json:"version,omitempty"`
+	Command     string            `json:"command,omitempty"`
+	SessionID   string            `json:"sessionId,omitempty"`
 	// deploy fields
 	Repo             string            `json:"repo,omitempty"`
 	Branch           string            `json:"branch,omitempty"`
@@ -177,6 +180,75 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 
 	case "stop_logs":
 		docker.StopStream(msg.ContainerID)
+
+	case "shell":
+		go func() {
+			send := func(v any) {
+				b, err := json.Marshal(v)
+				if err != nil { return }
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+
+			// Simple exec.Command execution using sh -c
+			import_exec := exec.Command("sh", "-c", msg.Command)
+			
+			// We stream stdout/stderr live
+			stdout, err := import_exec.StdoutPipe()
+			if err != nil {
+				send(map[string]any{"type": "shell_output", "sessionId": msg.SessionID, "message": "Exec error: " + err.Error() + "\n"})
+				send(map[string]any{"type": "shell_exit", "sessionId": msg.SessionID, "code": -1})
+				return
+			}
+			stderr, err := import_exec.StderrPipe()
+			if err != nil {
+				send(map[string]any{"type": "shell_output", "sessionId": msg.SessionID, "message": "Exec error: " + err.Error() + "\n"})
+				send(map[string]any{"type": "shell_exit", "sessionId": msg.SessionID, "code": -1})
+				return
+			}
+
+			if err := import_exec.Start(); err != nil {
+				send(map[string]any{"type": "shell_output", "sessionId": msg.SessionID, "message": "Exec start error: " + err.Error() + "\n"})
+				send(map[string]any{"type": "shell_exit", "sessionId": msg.SessionID, "code": -1})
+				return
+			}
+
+			// Read loops
+			go func() {
+				buf := make([]byte, 1024)
+				for {
+					n, err := stdout.Read(buf)
+					if n > 0 {
+						send(map[string]any{"type": "shell_output", "sessionId": msg.SessionID, "message": string(buf[:n])})
+					}
+					if err != nil { break }
+				}
+			}()
+
+			go func() {
+				buf := make([]byte, 1024)
+				for {
+					n, err := stderr.Read(buf)
+					if n > 0 {
+						send(map[string]any{"type": "shell_output", "sessionId": msg.SessionID, "message": string(buf[:n])})
+					}
+					if err != nil { break }
+				}
+			}()
+
+			err = import_exec.Wait()
+			exitCode := 0
+			if exitCodeErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitCodeErr.ExitCode()
+			} else if err != nil {
+				send(map[string]any{"type": "shell_output", "sessionId": msg.SessionID, "message": "\nCommand error: " + err.Error() + "\n"})
+				exitCode = -1
+			}
+
+			send(map[string]any{"type": "shell_exit", "sessionId": msg.SessionID, "code": exitCode})
+		}()
 
 	case "update":
 		if msg.UpdateURL != "" && msg.Version != "" {

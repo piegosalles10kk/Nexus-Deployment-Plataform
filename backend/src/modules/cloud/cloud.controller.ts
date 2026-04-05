@@ -292,3 +292,58 @@ export async function restartServer(
     res.json({ status: 'success', message: 'Reinício simulado. O Agente Nexus não está conectado no momento.' });
   } catch (err) { next(err); }
 }
+
+export async function getServerDetails(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+
+    let server = await db.cloudServer.findUnique({
+      where: { id },
+      include: {
+        provider: true,
+        projects: {
+          include: {
+            instances: true
+          }
+        }
+      }
+    });
+
+    let node: any = null;
+    let isManual = false;
+
+    if (server) {
+      const { getSetting } = await import('../../services/settings.service');
+      const nodeId = await getSetting(`NODE_ID_${id}`);
+      if (nodeId) {
+        node = await db.node.findUnique({ where: { id: nodeId } });
+      }
+    } else {
+      node = await db.node.findUnique({ where: { id } });
+      if (!node) {
+        return res.status(404).json({ status: 'error', message: 'Servidor ou Node não encontrado.' });
+      }
+      isManual = true;
+      server = {
+        id: node.id,
+        name: node.name,
+        region: 'Local / On-Premise',
+        instanceType: `${node.os}-${node.arch}`,
+        ip: node.ipAddress,
+        status: node.status === 'ONLINE' ? 'RUNNING' : 'STOPPED',
+        agentConnected: node.status === 'ONLINE',
+        agentVersion: node.version,
+        projects: []
+      } as any;
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        server,
+        node,
+        isManual
+      }
+    });
+  } catch (err) { next(err); }
+}

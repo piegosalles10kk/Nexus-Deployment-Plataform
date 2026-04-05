@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
   Cloud, Plus, Trash2, Server, Loader2, AlertCircle, CheckCircle2,
@@ -362,6 +363,7 @@ function ServerCard({
   providerId: string;
   onDeleted: () => void;
 }) {
+  const navigate = useNavigate();
   const [deleting, setDeleting] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -404,7 +406,12 @@ function ServerCard({
 
   return (
     <div
-      className="bg-bg-card border border-border rounded-xl p-5 flex items-center justify-between gap-4 group hover:border-border/80 transition-colors"
+      onClick={(e) => {
+        // Prevent navigation if clicking inside an action button/link
+        if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('details')) return;
+        navigate(`/cloud/servers/${server.id}`);
+      }}
+      className="bg-bg-card border border-border rounded-xl p-5 flex items-center justify-between gap-4 group hover:border-accent/40 cursor-pointer transition-colors"
       style={{
         transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
         opacity: removing ? 0 : 1,
@@ -421,7 +428,7 @@ function ServerCard({
       <div className="flex items-center gap-5 min-w-0 flex-1">
         {/* OS Icon box */}
         <div 
-          className="w-12 h-12 rounded-full bg-gradient-to-br from-[#E95420]/10 to-[#E95420]/5 border border-[#E95420]/20 flex items-center justify-center shrink-0"
+          className="w-12 h-12 rounded-full bg-gradient-to-br from-[#E95420]/10 to-[#E95420]/5 border border-[#E95420]/20 flex items-center justify-center shrink-0 shadow-sm"
           title="Ubuntu Linux"
         >
           <span className="text-[#E95420] font-black text-[10px] tracking-[0.2em] uppercase origin-center transform -rotate-90 block">Ubu</span>

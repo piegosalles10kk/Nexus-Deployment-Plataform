@@ -11,6 +11,7 @@ import AdminUsersPage from './pages/AdminUsersPage';
 import SettingsPage from './pages/SettingsPage';
 import GatewayPage from './pages/GatewayPage';
 import CloudPage from './pages/CloudPage';
+import ServerDetailsPage from './pages/ServerDetailsPage';
 
 function App() {
   return (

@@ -73,6 +73,25 @@ export function createApp() {
       socket.leave(`project:${projectId}`);
     });
 
+    socket.on('join:server', (serverId: string) => {
+      socket.join(`server:${serverId}`);
+    });
+
+    socket.on('leave:server', (serverId: string) => {
+      socket.leave(`server:${serverId}`);
+    });
+
+    socket.on('send_shell_command', async ({ nodeId, command, sessionId }: { nodeId: string, command: string, sessionId: string }) => {
+      const { getAgentSocket } = await import('./services/agent-ws.service');
+      const ws = getAgentSocket(nodeId);
+      if (ws && ws.readyState === 1) { // 1 = OPEN
+        ws.send(JSON.stringify({ type: 'shell', action: 'shell', command, sessionId }));
+      } else {
+        socket.emit('agent:shell_output', { sessionId, message: '\r\n[Erro]: O agente não está conectado no momento.\r\n' });
+        socket.emit('agent:shell_exit', { sessionId, code: -1 });
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`🔌 Socket disconnected: ${user.name}`);
     });

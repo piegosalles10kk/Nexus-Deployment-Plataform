@@ -22,4 +22,7 @@ router.get('/providers/:providerId/servers/:serverId', cloudController.getServer
 router.post('/providers/:providerId/servers/:serverId/restart', cloudController.restartServer);
 router.delete('/providers/:providerId/servers/:serverId', cloudController.deleteServer);
 
+// Unified Server Details (Cloud or Manual Node)
+router.get('/servers/:id/details', cloudController.getServerDetails);
+
 export default router;
