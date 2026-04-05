@@ -1,7 +1,6 @@
 {
   "name": "cicd-backend",
   "version": "1.0.0",
-  "type": "module",
   "description": "CI/CD Orchestrator Backend - Express + TypeScript + Prisma",
   "main": "dist/server.js",
   "scripts": {
