@@ -9,7 +9,7 @@ import {
   Rocket, Loader2, CheckCircle2, XCircle, PauseCircle, GitCommit,
   FlaskConical, Clock, Trash2, Plus, Eye, EyeOff, Save, AlertCircle, X,
   ChevronUp, ChevronDown, Info, Layers, Cpu, HardDrive,
-  Zap, RefreshCw, Globe,
+  Zap, RefreshCw,
 } from 'lucide-react';
 import MetricsChart, { MetricPoint } from '../components/MetricsChart';
 
