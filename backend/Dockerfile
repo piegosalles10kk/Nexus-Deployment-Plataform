@@ -20,8 +20,12 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install Docker CLI for DooD operations, Git and Terraform
-RUN apk add --no-cache docker-cli git terraform
+# Install Docker CLI, Git and Terraform
+RUN apk add --no-cache docker-cli git curl unzip && \
+    curl -sSL https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip -o terraform.zip && \
+    unzip terraform.zip && \
+    mv terraform /usr/local/bin/ && \
+    rm terraform.zip
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
