@@ -641,12 +641,139 @@ function ProviderCard({
   );
 }
 
+// ─── Manual Server Modal ──────────────────────────────────────────────────────
+function ManualServerModal({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [installCommand, setInstallCommand] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setLoading(true);
+    try {
+      const res = await api.post('/agent/nodes', { name });
+      const { enrollToken } = res.data.data;
+      
+      const domain = window.location.origin;
+      const wsDomain = domain.replace(/^http/, 'ws');
+      const cmd = `curl -sSL ${domain}/install.sh | sudo bash -s -- \\
+  --token "${enrollToken}" \\
+  --master "${wsDomain}/ws/agent"`;
+      
+      setInstallCommand(cmd);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Falha ao gerar comando de instalação.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyCommand = () => {
+    if (!installCommand) return;
+    navigator.clipboard.writeText(installCommand);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-bg-primary border border-border w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden shadow-black/50">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-bg-card">
+          <div>
+            <h3 className="text-lg font-bold text-text-primary flex items-center gap-2">
+              <Server className="w-5 h-5 text-accent" />
+              Adicionar Servidor Local (On-Premise)
+            </h3>
+            <p className="text-xs text-text-muted mt-1">Conecte um servidor existente instalando o Nexus Agent manualmente</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-bg-card-hover rounded-lg transition-colors">
+            <X className="w-5 h-5 text-text-secondary" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {!installCommand ? (
+            <form onSubmit={handleGenerate} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-text-secondary mb-1">Nome do Servidor</label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex: DB-Master-Local"
+                  className="w-full bg-bg-card px-4 py-2.5 rounded-lg border border-border text-text-primary focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all text-sm"
+                />
+              </div>
+              
+              <div className="pt-2 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-lg border border-border text-text-secondary hover:text-text-primary text-sm font-semibold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-light text-white text-sm font-semibold transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Gerar Comando de Instalação
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg bg-success/10 border border-success/20 text-success text-sm flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Instruções geradas com sucesso!</p>
+                  <p className="text-xs mt-1 text-success/80">
+                    O token abaixo expira em 1 hora. Copie e cole este comando diretamente no terminal Linux (Ubuntu/Debian/CentOS) do seu servidor em que você não usa Terraform.
+                  </p>
+                </div>
+              </div>
+
+              <div className="relative group">
+                <pre className="p-4 bg-bg-card border border-border rounded-lg text-xs font-mono text-text-primary overflow-x-auto whitespace-pre-wrap">
+                  {installCommand}
+                </pre>
+                <button
+                  onClick={copyCommand}
+                  className="absolute top-2 right-2 p-2 rounded-md bg-bg-primary border border-border hover:bg-bg-card-hover text-text-secondary transition-colors"
+                  title="Copiar comando"
+                >
+                  {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              
+              <div className="pt-4 flex justify-end">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-lg bg-bg-card border border-border hover:bg-bg-card-hover text-text-primary text-sm font-semibold transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function CloudPage() {
   const [providers, setProviders] = useState<CloudProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddProvider, setShowAddProvider] = useState(false);
+  const [showManualServer, setShowManualServer] = useState(false);
 
   const load = async () => {
     setError('');
@@ -676,13 +803,22 @@ export default function CloudPage() {
               <p className="text-sm text-text-secondary mt-0.5">Gerencie servidores remotos via Terraform (AWS · Azure · GCP · DigitalOcean)</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowAddProvider(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-light text-white text-sm font-semibold transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Adicionar Provider
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowManualServer(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-bg-card hover:bg-bg-card-hover border border-border hover:border-accent/50 text-text-primary font-semibold transition-all"
+            >
+              <Server className="w-4 h-4 text-accent" />
+              Vincular Servidor Local
+            </button>
+            <button
+              onClick={() => setShowAddProvider(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent hover:bg-accent-light text-white font-semibold transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Adicionar Cloud
+            </button>
+          </div>
         </div>
       </div>
 
@@ -729,6 +865,10 @@ export default function CloudPage() {
 
       {showAddProvider && (
         <AddProviderModal onClose={() => setShowAddProvider(false)} onAdded={load} />
+      )}
+      
+      {showManualServer && (
+        <ManualServerModal onClose={() => setShowManualServer(false)} />
       )}
     </div>
   );
