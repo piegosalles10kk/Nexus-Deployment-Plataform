@@ -42,9 +42,8 @@ export async function enrollAgent(req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    const certs = await issueClientCert(`node-${node.id}`);
-
-    res.json({ status: 'success', data: certs });
+    // Return the node's persistent token so the agent can authenticate the WS connection
+    res.json({ status: 'success', data: { nodeToken: node.token } });
   } catch (error) {
     next(error);
   }
