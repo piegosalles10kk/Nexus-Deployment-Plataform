@@ -95,6 +95,18 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/cloud/servers/:id"
+            element={
+              <ProtectedRoute>
+                <RoleGuard allowedRoles={['ADM']} fallback={<Navigate to="/dashboard" replace />}>
+                  <AppLayout>
+                    <ServerDetailsPage />
+                  </AppLayout>
+                </RoleGuard>
+              </ProtectedRoute>
+            }
+          />
 
           {/* Default redirect */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
