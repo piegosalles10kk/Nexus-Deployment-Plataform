@@ -8,6 +8,7 @@ RUN go mod download
 COPY agent/ ./
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o nexus-agent-linux-amd64 ./cmd/agent
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o nexus-agent-linux-arm64 ./cmd/agent
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o nexus-agent-windows-amd64.exe ./cmd/agent
 
 # Stage 2: Build Node.js backend
 FROM node:20-alpine AS builder
@@ -46,7 +47,9 @@ COPY --from=builder /app/prisma ./prisma
 # Copy agent binaries and install script to be served as static files
 COPY --from=agent-builder /agent/nexus-agent-linux-amd64 ./public/downloads/nexus-agent-linux-amd64
 COPY --from=agent-builder /agent/nexus-agent-linux-arm64 ./public/downloads/nexus-agent-linux-arm64
+COPY --from=agent-builder /agent/nexus-agent-windows-amd64.exe ./public/downloads/nexus-agent-windows-amd64.exe
 COPY agent/scripts/install.sh ./public/install.sh
+COPY agent/scripts/install.ps1 ./public/install.ps1
 RUN chmod +x ./public/downloads/nexus-agent-linux-amd64 \
              ./public/downloads/nexus-agent-linux-arm64 \
              ./public/install.sh

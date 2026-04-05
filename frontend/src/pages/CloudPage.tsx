@@ -652,7 +652,9 @@ function ProviderCard({
 function ManualServerModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [installCommand, setInstallCommand] = useState<string | null>(null);
+  const [installCommandLinux, setInstallCommandLinux] = useState('');
+  const [installCommandWindows, setInstallCommandWindows] = useState('');
+  const [osTab, setOsTab] = useState<'linux'|'windows'>('linux');
   const [copied, setCopied] = useState(false);
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -660,28 +662,23 @@ function ManualServerModal({ onClose }: { onClose: () => void }) {
     if (!name.trim()) return;
     setLoading(true);
     try {
-      const res = await api.post('/agent/nodes', { name });
+      const res = await api.post('/v1/agent/nodes', { name });
       const { enrollToken } = res.data.data;
       
       const domain = window.location.origin;
-      const wsDomain = domain.replace(/^http/, 'ws');
-      const cmd = `curl -sSL ${domain}/install.sh | sudo bash -s -- \\
-  --token "${enrollToken}" \\
-  --master "${wsDomain}/ws/agent"`;
+      const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProto}//${window.location.host}/ws/agent`;
       
-      setInstallCommand(cmd);
+      const bashCmd = `curl -sSL ${domain}/install.sh | sudo bash -s -- --token ${enrollToken} --master ${wsUrl}`;
+      const psCmd = `Invoke-WebRequest -Uri "${domain}/install.ps1" -OutFile "C:\\install.ps1"; & "C:\\install.ps1" -token "${enrollToken}" -master "${wsUrl}"`;
+      
+      setInstallCommandLinux(bashCmd);
+      setInstallCommandWindows(psCmd);
     } catch (err: any) {
       alert(err.response?.data?.message || 'Falha ao gerar comando de instalação.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const copyCommand = () => {
-    if (!installCommand) return;
-    navigator.clipboard.writeText(installCommand);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -701,7 +698,7 @@ function ManualServerModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="p-6">
-          {!installCommand ? (
+          {!installCommandLinux ? (
             <form onSubmit={handleGenerate} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-text-secondary mb-1">Nome do Servidor</label>
@@ -735,27 +732,35 @@ function ManualServerModal({ onClose }: { onClose: () => void }) {
             </form>
           ) : (
             <div className="space-y-4">
-              <div className="p-4 rounded-lg bg-success/10 border border-success/20 text-success text-sm flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3">
+                <CheckCircle2 className="text-emerald-400 mt-0.5" />
                 <div>
-                  <p className="font-bold">Instruções geradas com sucesso!</p>
-                  <p className="text-xs mt-1 text-success/80">
-                    O token abaixo expira em 1 hora. Copie e cole este comando diretamente no terminal Linux (Ubuntu/Debian/CentOS) do seu servidor em que você não usa Terraform.
-                  </p>
+                  <h4 className="font-bold text-emerald-400">Token Gerado com Sucesso!</h4>
+                  <p className="text-sm text-zinc-400 mt-1">Execute o comando abaixo no terminal do seu servidor local para instalar o agente.</p>
                 </div>
               </div>
 
-              <div className="relative group">
-                <pre className="p-4 bg-bg-card border border-border rounded-lg text-xs font-mono text-text-primary overflow-x-auto whitespace-pre-wrap">
-                  {installCommand}
-                </pre>
-                <button
-                  onClick={copyCommand}
-                  className="absolute top-2 right-2 p-2 rounded-md bg-bg-primary border border-border hover:bg-bg-card-hover text-text-secondary transition-colors"
-                  title="Copiar comando"
-                >
-                  {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                </button>
+              <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+                <div className="flex bg-zinc-900 border-b border-zinc-800">
+                  <button onClick={() => setOsTab('linux')} className={`flex-1 py-3 text-xs font-bold uppercase transition-colors ${osTab === 'linux' ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-500/5' : 'text-zinc-500 hover:text-zinc-300'}`}>Linux (Bash)</button>
+                  <button onClick={() => setOsTab('windows')} className={`flex-1 py-3 text-xs font-bold uppercase transition-colors ${osTab === 'windows' ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-500/5' : 'text-zinc-500 hover:text-zinc-300'}`}>Windows (PowerShell)</button>
+                </div>
+                <div className="p-4 bg-zinc-950 flex flex-col gap-3">
+                  <code className="text-xs text-blue-300 font-mono break-all whitespace-pre-wrap select-all">
+                    {osTab === 'linux' ? installCommandLinux : installCommandWindows}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(osTab === 'linux' ? installCommandLinux : installCommandWindows);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="self-end px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs font-semibold text-zinc-300 flex items-center gap-2 transition-all"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+                    Copiar
+                  </button>
+                </div>
               </div>
               
               <div className="pt-4 flex justify-end">

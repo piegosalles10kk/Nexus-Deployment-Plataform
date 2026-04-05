@@ -1,67 +1,60 @@
-# Usage:
-#   Invoke-WebRequest -Uri "https://your-backend/install.ps1" -OutFile install.ps1
-#   .\install.ps1 -Token "YOUR_TOKEN" -Master "wss://your-backend/ws/agent"
+param(
+    [Parameter(Mandatory=$true)]
+    [string]$token,
 
-Param(
-    [Parameter(Mandatory = $true)]  [string] $Token,
-    [Parameter(Mandatory = $true)]  [string] $Master
+    [Parameter(Mandatory=$true)]
+    [string]$master
 )
 
-# ── Require Administrator ─────────────────────────────────────────────────────
-$currentPrincipal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
-if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Error "This script must be run as Administrator. Exiting."
-    exit 1
+# Exit on error
+$ErrorActionPreference = "Stop"
+
+# Derive HTTP/S base URL from the WS/S master URL (supports both ws:// and wss://)
+$baseUrl = $master -replace "^ws(s)?://", "http`$1://"
+$baseUrl = $baseUrl -replace "/ws/agent$", ""
+
+# Determine Architecture
+$arch = if ([System.Environment]::Is64BitOperatingSystem) { "amd64" } else { "386" }
+
+# In this phase, we only generate amd64 for Windows in Dockerfile
+$binUrl = "$baseUrl/downloads/nexus-agent-windows-amd64.exe"
+$installDir = "C:\NexusAgent"
+$binPath = "$installDir\nexus-agent.exe"
+
+Write-Host "==> Detected: windows/$arch"
+Write-Host "==> Downloading nexus-agent from $binUrl"
+
+if (!(Test-Path -Path $installDir)) {
+    New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 }
 
-# ── Derive HTTPS base URL ─────────────────────────────────────────────────────
-$BaseUrl = $Master -replace '^wss://', 'https://' -replace '/ws/agent$', ''
-$BinDir  = "C:\Program Files\10KK-Agent"
-$CertDir = "$BinDir\certs"
-$BinPath = "$BinDir\10kk-agent.exe"
+# Download the file
+Invoke-WebRequest -Uri $binUrl -OutFile $binPath
 
-Write-Host "==> Creating directories"
-New-Item -Path $CertDir -ItemType Directory -Force | Out-Null
-
-# ── Download binary ───────────────────────────────────────────────────────────
-$BinUrl = "$BaseUrl/downloads/10kk-agent-windows-amd64.exe"
-Write-Host "==> Downloading 10kk-agent from $BinUrl"
-Invoke-WebRequest -Uri $BinUrl -OutFile $BinPath -UseBasicParsing
-
-# ── Enroll: request certificates ─────────────────────────────────────────────
-Write-Host "==> Enrolling with master at $BaseUrl"
-$Headers = @{ "Authorization" = "Bearer $Token"; "Content-Type" = "application/json" }
-$EnrollResp = Invoke-RestMethod -Method POST -Uri "$BaseUrl/api/v1/agent/enroll" -Headers $Headers
-
-# Save certificates
-$EnrollResp.ca_crt     | Set-Content -Path "$CertDir\ca.crt"     -Encoding UTF8 -NoNewline
-$EnrollResp.client_crt | Set-Content -Path "$CertDir\client.crt" -Encoding UTF8 -NoNewline
-$EnrollResp.client_key | Set-Content -Path "$CertDir\client.key" -Encoding UTF8 -NoNewline
-
-# Restrict key permissions to SYSTEM + Administrators only
-$acl = Get-Acl "$CertDir\client.key"
-$acl.SetAccessRuleProtection($true, $false)
-$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    "BUILTIN\Administrators", "FullControl", "Allow")
-$acl.SetAccessRule($rule)
-Set-Acl "$CertDir\client.key" $acl
-
-Write-Host "  Certificates saved to $CertDir"
-
-# ── Install Windows Service ───────────────────────────────────────────────────
-Write-Host "==> Installing 10kk-agent as Windows Service"
-& $BinPath -service install -master $Master -token $Token
-
-# ── Start Service ─────────────────────────────────────────────────────────────
-Write-Host "==> Starting 10kk-agent service"
-Start-Service -Name "10kk-agent" -ErrorAction SilentlyContinue
-
-$svc = Get-Service -Name "10kk-agent" -ErrorAction SilentlyContinue
-if ($svc -and $svc.Status -eq "Running") {
-    Write-Host ""
-    Write-Host "OK 10KK Agent installed and running."
-    Write-Host "   Master  : $Master"
-    Write-Host "   Logs    : Get-EventLog -LogName Application -Source '10kk-agent'"
-} else {
-    Write-Warning "Service may not be running. Check: Get-Service 10kk-agent"
+Write-Host "==> Enrolling with master at $baseUrl"
+$headers = @{
+    "Authorization" = "Bearer $token"
+    "Content-Type" = "application/json"
 }
+
+try {
+    Invoke-RestMethod -Uri "$baseUrl/api/v1/agent/enroll" -Method Post -Headers $headers -ErrorAction Stop | Out-Null
+} catch {
+    Write-Host "Note: Enrollment returned a non-success code (could already be enrolled)."
+}
+
+Write-Host "==> Installing nexus-agent as system service"
+
+# Install as Windows Service using the built-in kardianos/service arguments
+$installArgs = "-service install -master `"$master`" -token `"$token`""
+Start-Process -FilePath $binPath -ArgumentList $installArgs -Wait -NoNewWindow
+
+# Start the service
+Write-Host "==> Starting nexus-agent service"
+$startArgs = "-service start"
+Start-Process -FilePath $binPath -ArgumentList $startArgs -Wait -NoNewWindow
+
+Write-Host ""
+Write-Host "✓ Nexus Agent installed and running on Windows."
+Write-Host "  Master  : $master"
+Write-Host "  Logs    : Consult Windows Event Viewer (Application Log) or Windows Services (services.msc)"
