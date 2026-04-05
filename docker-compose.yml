@@ -30,12 +30,13 @@ services:
   cicd-postgres:
     image: postgres:16-alpine
     container_name: 10kk-postgres
+    restart: always
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: cicd
-      POSTGRES_PASSWORD: cicd_pass
-      POSTGRES_DB: cicd_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -44,6 +45,7 @@ services:
   cicd-redis:
     image: redis:7-alpine
     container_name: 10kk-redis
+    restart: always
     ports:
       - "6379:6379"
     networks:
@@ -54,18 +56,11 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: 10kk-backend
+    restart: always
     ports:
       - "4500:4500"
-    environment:
-      - DATABASE_URL=postgresql://cicd:cicd_pass@10kk-postgres:5432/cicd_db
-      - REDIS_URL=redis://10kk-redis:6379
-      - PORT=4500
-      - NODE_ENV=production
-      - JWT_SECRET=a1328bdca9c6b97e1aa18e9f386e22ee
-      - GITHUB_WEBHOOK_SECRET=b95b3e3daa4d291db2758b72f7d753d7
-      - ENCRYPTION_KEY=e1357eaa3a1ca199d708b9580f0c40811316b1df6e55d5404248c3360cfb2713
-      - PORT_CHECK_HOST=host.docker.internal
-      - DOCKER_PROXY_HOST=tcp://docker-proxy:2375
+    env_file:
+      - .env
     depends_on:
       - cicd-postgres
       - cicd-redis
@@ -82,10 +77,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: 10kk-frontend
+    restart: always
     ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_URL=http://localhost:4500/api
+      - "8000:8000"
+    env_file:
+      - .env
     depends_on:
       - cicd-backend
     networks:

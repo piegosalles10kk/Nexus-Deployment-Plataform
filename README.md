@@ -138,30 +138,56 @@ O **Nexus** é uma solução self-hosted completa de CI/CD e gerenciamento de in
 git clone <repo-url>
 cd 10KK-PLATFORM-UNIFIED
 
-# 2. Suba todos os serviços
+# 2. Prepare o arquivo de ambiente (.env)
+cp .env.example .env
+# Edite o .env com suas chaves e segredos reais
+nano .env
+
+# 3. Suba todos os serviços em modo produção
 docker-compose up -d --build
 
-# 3. Aplique o schema do banco
+# 4. Aplique o schema do banco
 docker exec -it 10kk-backend npx prisma db push
 
-# 4. Crie o usuário ADM inicial
+# 5. Crie o usuário ADM inicial
 docker exec -it 10kk-backend npx prisma db seed
 ```
 
-**Acesso:** `http://localhost:5173`
+**Acesso:** `http://localhost:8000`
 **Credenciais padrão:** `admin@cicd.local` / `admin123`
 
 ### Portas
 
 | Serviço | Porta | Descrição |
 |---|---|---|
-| Frontend | 5173 | Interface web |
+| Frontend | 8000 | Interface web (Nginx Prod) |
 | Backend API | 4500 | REST API + Socket.io |
 | Webhook GitHub | 4500/webhook/github | Endpoint para webhooks |
 | API Gateway | 4500/\<path\> | Proxy dinâmico |
 | Agent WSS | 8443 | WebSocket mTLS para agentes |
 | PostgreSQL | 5432 | Banco de dados |
 | Redis | 6379 | Cache + rate limit |
+
+---
+
+## Deploy em VPS (Hostinger / DigitalOcean)
+
+Para rodar a plataforma em uma VPS de forma profissional, siga estes passos:
+
+### 1. Requisitos de Rede
+Certifique-se de que as portas **8000** (paine), **4500** (api/webhooks) e **8443** (agentes) estão abertas no firewall da sua VPS.
+
+### 2. Configuração de DNS/SSL (Recomendado)
+Embora a plataforma rode diretamente no Docker, recomenda-se usar um Proxy Reverso (como **Nginx Proxy Manager** ou **Traefik**) na VPS para gerenciar SSL (HTTPS).
+
+### 3. Ingestão de Variáveis (.env)
+A plataforma utiliza um arquivo `.env` centralizado na raiz. Antes de rodar o `docker-compose`, você **deve** preencher as seguintes variáveis:
+- `JWT_SECRET`: Uma string aleatória longa.
+- `ENCRYPTION_KEY`: Uma string de 64 caracteres hexadecimais.
+- `VITE_API_URL`: A URL pública da sua API (ex: `http://sua-vps-ip:4500/api`).
+
+### 4. Upgrade de Segurança
+Após o primeiro deploy, remova as credenciais padrão criando um novo usuário administrador e deletando o usuário `admin@cicd.local`.
 
 ---
 
