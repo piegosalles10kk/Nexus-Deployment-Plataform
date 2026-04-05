@@ -20,8 +20,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install Docker CLI for DooD operations
-RUN apk add --no-cache docker-cli git
+# Install Docker CLI for DooD operations, Git and Terraform
+RUN apk add --no-cache docker-cli git terraform
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules

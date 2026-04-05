@@ -129,7 +129,7 @@ O **Nexus** é uma solução self-hosted completa de CI/CD e gerenciamento de in
 
 - Docker e Docker Compose
 - Git
-- `terraform` CLI (necessário apenas para o módulo Cloud)
+- `terraform` CLI (Opcional no host; **já vem pré-instalado na imagem Docker do Backend**)
 
 ### Subindo a plataforma
 
@@ -188,6 +188,9 @@ A plataforma utiliza um arquivo `.env` centralizado na raiz. Antes de rodar o `d
 
 ### 4. Upgrade de Segurança
 Após o primeiro deploy, remova as credenciais padrão criando um novo usuário administrador e deletando o usuário `admin@cicd.local`.
+
+### 5. Terraform Integrado
+O backend já vem com o **Terraform CLI pré-instalado** dentro do container. Isso significa que você não precisa instalar o Terraform manualmente na sua VPS para usar o módulo de Cloud/Infrastructure.
 
 ---
 
