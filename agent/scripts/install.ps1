@@ -58,3 +58,5 @@ Write-Host ""
 Write-Host "✓ Nexus Agent installed and running on Windows."
 Write-Host "  Master  : $master"
 Write-Host "  Logs    : Consult Windows Event Viewer (Application Log) or Windows Services (services.msc)"
+
+# End of script
