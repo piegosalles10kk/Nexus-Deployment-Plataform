@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { LayoutDashboard, Users, LogOut, Shield, Settings, Globe, Cloud } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, Shield, Settings, Globe, Cloud, FolderGit2 } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout, hasRole } = useAuth();
@@ -31,6 +31,10 @@ export default function Navbar() {
         <NavLink to="/dashboard" className={linkClass}>
           <LayoutDashboard className="w-4 h-4" />
           Painel
+        </NavLink>
+        <NavLink to="/projects" className={linkClass}>
+          <FolderGit2 className="w-4 h-4" />
+          Projetos
         </NavLink>
         {(hasRole('ADM') || hasRole('TECNICO')) && (
           <NavLink to="/gateway" className={linkClass}>

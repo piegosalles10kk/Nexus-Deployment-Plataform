@@ -22,6 +22,7 @@ import lbRoutes from './modules/lb/lb.routes';
 import gatewayRoutes from './modules/gateway/gateway.routes';
 import cloudRoutes from './modules/cloud/cloud.routes';
 import agentRoutes from './modules/agent/agent.routes';
+import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { startAgentWsServer } from './services/agent-ws.service';
 import { trafficManager } from './modules/gateway/traffic.middleware';
 import { startMonitoring, stopMonitoring } from './services/monitoring.service';
@@ -165,6 +166,7 @@ export function createApp() {
   app.use('/api/gateway', gatewayRoutes);
   app.use('/api/cloud', cloudRoutes);
   app.use('/api/v1/agent', agentRoutes);
+  app.use('/api/dashboard', dashboardRoutes);
   app.use('/webhook', webhookRoutes);
 
   // Error handler (must be last)

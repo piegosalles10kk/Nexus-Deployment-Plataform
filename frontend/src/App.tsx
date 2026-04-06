@@ -12,6 +12,7 @@ import SettingsPage from './pages/SettingsPage';
 import GatewayPage from './pages/GatewayPage';
 import CloudPage from './pages/CloudPage';
 import ServerDetailsPage from './pages/ServerDetailsPage';
+import ProjectsPage from './pages/ProjectsPage';
 
 function App() {
   return (
@@ -30,6 +31,16 @@ function App() {
               <ProtectedRoute>
                 <AppLayout>
                   <DashboardPage />
+                </AppLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects"
+            element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <ProjectsPage />
                 </AppLayout>
               </ProtectedRoute>
             }
