@@ -52,8 +52,8 @@ export const AddWidgetModal = ({ onClose, onAdd }: AddWidgetModalProps) => {
       type,
       title: widgetTypes.find(t => t.id === type)?.name || 'Novo Widget',
       settings: type.startsWith('SERVER_') ? { nodeId: selectedTarget } : { projectId: selectedTarget },
-      w: type === 'SERVER_CARD' ? 4 : 1,
-      h: type === 'SERVER_CARD' ? 1 : 1,
+      w: type === 'SERVER_CARD' ? 2 : 1,
+      h: type === 'SERVER_CARD' ? 2 : 1,
     };
 
     onAdd(widget);

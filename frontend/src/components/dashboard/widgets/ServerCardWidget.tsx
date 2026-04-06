@@ -25,17 +25,17 @@ export const ServerCardWidget = ({ nodeId, telemetryData, networkHistory }: Serv
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-4 gap-4 min-h-0">
-        <div className="col-span-1 bg-bg-secondary/20 rounded-lg p-2 border border-border/50">
+      <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3 min-h-0">
+        <div className="bg-bg-secondary/20 rounded-lg p-1.5 border border-border/50">
           <GaugeWidget value={telemetryData?.cpuUsage || 0} label="CPU" color="#6366f1" />
         </div>
-        <div className="col-span-1 bg-bg-secondary/20 rounded-lg p-2 border border-border/50">
+        <div className="bg-bg-secondary/20 rounded-lg p-1.5 border border-border/50">
           <GaugeWidget value={telemetryData?.ramUsage || 0} label="RAM" color="#818cf8" />
         </div>
-        <div className="col-span-1 bg-bg-secondary/20 rounded-lg p-2 border border-border/50">
+        <div className="bg-bg-secondary/20 rounded-lg p-1.5 border border-border/50">
           <StoragePieWidget used={telemetryData?.diskUsed || 0} total={telemetryData?.diskTotal || 1} />
         </div>
-        <div className="col-span-1 bg-bg-secondary/20 rounded-lg p-2 border border-border/50 relative">
+        <div className="bg-bg-secondary/20 rounded-lg p-1.5 border border-border/50 relative">
           <NetworkLineWidget data={networkHistory || []} />
         </div>
       </div>
