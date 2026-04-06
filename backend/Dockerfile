@@ -58,5 +58,6 @@ COPY backend/scripts/docker-entrypoint.sh /app/scripts/docker-entrypoint.sh
 RUN chmod +x /app/scripts/docker-entrypoint.sh
 
 EXPOSE 4500
+EXPOSE 8443
 
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]

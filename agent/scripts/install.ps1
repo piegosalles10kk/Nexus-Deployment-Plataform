@@ -63,6 +63,9 @@ try {
     Write-Host "[Nexus] Enrollment note: " + $_.Exception.Message
 }
 
+Write-Host "[Nexus] Cleaning up existing service (if any)..."
+Start-Process -FilePath $binPath -ArgumentList "-service uninstall" -Wait -NoNewWindow -ErrorAction SilentlyContinue
+
 Write-Host "[Nexus] Installing as Windows service..."
 $installArgs = "-service install -master """ + $master + """ -token """ + $token + """"
 Start-Process -FilePath $binPath -ArgumentList $installArgs -Wait -NoNewWindow
