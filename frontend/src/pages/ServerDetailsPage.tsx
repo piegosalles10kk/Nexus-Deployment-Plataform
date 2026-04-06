@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { getSocket } from '../services/socket';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 export default function ServerDetailsPage() {
   const { id } = useParams();

@@ -759,13 +759,37 @@ function ProviderCard({
 }
 
 // ─── Manual Server Modal ──────────────────────────────────────────────────────
-function ManualServerModal({ onClose }: { onClose: () => void }) {
+function ManualServerModal({ onClose, onAdded }: { onClose: () => void, onAdded: () => Promise<void> | void }) {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [enrollToken, setEnrollToken] = useState('');
   const [installCommandLinux, setInstallCommandLinux] = useState('');
   const [installCommandWindows, setInstallCommandWindows] = useState('');
   const [osTab, setOsTab] = useState<'linux'|'windows'>('linux');
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!enrollToken) return;
+    let nodeId = '';
+    try {
+      const payload = JSON.parse(atob(enrollToken.split('.')[1]));
+      nodeId = payload.nodeId;
+    } catch { return; }
+    
+    if (!nodeId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get('/v1/agent/nodes');
+        const nodes = res.data.data.nodes;
+        const me = nodes.find((n: any) => n.id === nodeId);
+        if (me && me.status === 'ONLINE') {
+           if (onAdded) onAdded();
+           onClose();
+        }
+      } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [enrollToken, onAdded, onClose]);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -774,6 +798,7 @@ function ManualServerModal({ onClose }: { onClose: () => void }) {
     try {
       const res = await api.post('/v1/agent/nodes', { name });
       const { enrollToken } = res.data.data;
+      setEnrollToken(enrollToken);
       
       const domain = window.location.origin;
       const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
