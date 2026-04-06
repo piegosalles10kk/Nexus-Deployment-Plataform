@@ -1,4 +1,3 @@
-import React, { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface NetworkPoint {
@@ -19,7 +18,7 @@ const formatSpeed = (bytes: number) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
-export const NetworkLineWidget: React.FC<NetworkLineProps> = ({ data }) => {
+export const NetworkLineWidget = ({ data }: NetworkLineProps) => {
   return (
     <div className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
@@ -45,7 +44,7 @@ export const NetworkLineWidget: React.FC<NetworkLineProps> = ({ data }) => {
           />
           <Tooltip 
             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '10px' }}
-            formatter={(value: number) => formatSpeed(value)}
+            formatter={(value: any) => formatSpeed(value)}
           />
           <Area
             type="monotone"

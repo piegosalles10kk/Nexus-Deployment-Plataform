@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Rocket, CheckCircle2, XCircle, Clock, GitCommit } from 'lucide-react';
-import api from '../../services/api';
+import api from '../../../services/api';
 
 interface ProjectMiniWidgetProps {
   projectId: string;
 }
 
-export const ProjectMiniWidget: React.FC<ProjectMiniWidgetProps> = ({ projectId }) => {
+export const ProjectMiniWidget = ({ projectId }: ProjectMiniWidgetProps) => {
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 

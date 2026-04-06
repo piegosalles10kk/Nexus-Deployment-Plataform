@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 interface StoragePieProps {
@@ -15,7 +15,7 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
-export const StoragePieWidget: React.FC<StoragePieProps> = ({ used, total }) => {
+export const StoragePieWidget = ({ used, total }: StoragePieProps) => {
   const data = useMemo(() => [
     { name: 'Used', value: used },
     { name: 'Free', value: Math.max(0, total - used) },
@@ -46,7 +46,7 @@ export const StoragePieWidget: React.FC<StoragePieProps> = ({ used, total }) => 
             <Tooltip 
               contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '10px' }}
               itemStyle={{ color: '#f8fafc' }}
-              formatter={(value: number) => formatBytes(value)}
+              formatter={(value: any) => formatBytes(value)}
             />
           </PieChart>
         </ResponsiveContainer>

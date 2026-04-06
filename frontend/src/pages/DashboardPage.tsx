@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Responsive, WidthProvider } from 'react-grid-layout';
-import '/node_modules/react-grid-layout/css/styles.css';
-import '/node_modules/react-resizable/css/styles.css';
+import { Responsive } from 'react-grid-layout';
+// @ts-ignore
+import WidthProvider from 'react-grid-layout/build/WidthProvider';
+import 'react-grid-layout/css/styles.css';
+import 'react-resizable/css/styles.css';
 
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { io } from 'socket.io-client';
-import { env } from '../config/env';
 
-import { Plus, LayoutDashboard, Loader2, Save, Trash2, Settings2, RefreshCw } from 'lucide-react';
+import { Plus, LayoutDashboard, Loader2, Settings2 } from 'lucide-react';
 import { BaseWidget } from '../components/dashboard/widgets/BaseWidget';
 import { GaugeWidget } from '../components/dashboard/widgets/GaugeWidget';
 import { StoragePieWidget } from '../components/dashboard/widgets/StoragePieWidget';
@@ -16,6 +17,7 @@ import { NetworkLineWidget } from '../components/dashboard/widgets/NetworkLineWi
 import { ProjectMiniWidget } from '../components/dashboard/widgets/ProjectMiniWidget';
 import { AddWidgetModal } from '../components/dashboard/AddWidgetModal';
 
+// @ts-ignore
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 interface Widget {
@@ -56,17 +58,17 @@ export default function DashboardPage() {
 
   // Socket.io for real-time telemetry
   useEffect(() => {
-    const socket = io(env.BACKEND_URL, {
+    const socket = io(window.location.origin, {
       auth: { token: localStorage.getItem('token') },
     });
     socketRef.current = socket;
 
-    socket.on('node:telemetry', ({ nodeId, data }) => {
-      setTelemetry((prev) => ({ ...prev, [nodeId]: data }));
+    socket.on('node:telemetry', ({ nodeId, data }: any) => {
+      setTelemetry((prev: any) => ({ ...prev, [nodeId]: data }));
       
       // Update network history for line charts (keep last 20 points)
       if (data.netTxSec !== undefined && data.netRxSec !== undefined) {
-        setNetworkHistory((prev) => {
+        setNetworkHistory((prev: any) => {
           const history = prev[nodeId] || [];
           const newPoint = {
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -80,7 +82,7 @@ export default function DashboardPage() {
     });
 
     // Subscribe to all nodes used in widgets
-    widgets.forEach((w) => {
+    widgets.forEach((w: Widget) => {
       if (w.settings?.nodeId) {
         socket.emit('join:server', w.settings.nodeId);
       }
@@ -94,7 +96,7 @@ export default function DashboardPage() {
   const handleAddWidget = async (newWidget: any) => {
     try {
       const res = await api.post('/dashboard/widgets', newWidget);
-      setWidgets((prev) => [...prev, res.data.data.widget]);
+      setWidgets((prev: Widget[]) => [...prev, res.data.data.widget]);
       setShowAddModal(false);
     } catch (err) {
       console.error('Failed to add widget', err);
@@ -104,7 +106,7 @@ export default function DashboardPage() {
   const handleRemoveWidget = async (id: string) => {
     try {
       await api.delete(`/dashboard/widgets/${id}`);
-      setWidgets((prev) => prev.filter((w) => w.id !== id));
+      setWidgets((prev: Widget[]) => prev.filter((w: Widget) => w.id !== id));
     } catch (err) {
       console.error('Failed to remove widget', err);
     }

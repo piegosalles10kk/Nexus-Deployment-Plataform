@@ -1,14 +1,14 @@
-import React from 'react';
+import { ReactNode } from 'react';
 import { X, GripVertical } from 'lucide-react';
 
 interface BaseWidgetProps {
   title: string;
   onRemove?: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
   dragHandleClass?: string;
 }
 
-export const BaseWidget: React.FC<BaseWidgetProps> = ({ title, onRemove, children, dragHandleClass }) => {
+export const BaseWidget = ({ title, onRemove, children, dragHandleClass }: BaseWidgetProps) => {
   return (
     <div className="h-full bg-bg-card border border-border rounded-xl flex flex-col overflow-hidden group shadow-sm hover:shadow-md transition-shadow">
       {/* Header */}

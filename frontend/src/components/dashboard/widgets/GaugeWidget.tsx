@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
 interface GaugeProps {
@@ -8,7 +8,7 @@ interface GaugeProps {
   unit?: string;
 }
 
-export const GaugeWidget: React.FC<GaugeProps> = ({ value, label, color = '#6366f1', unit = '%' }) => {
+export const GaugeWidget = ({ value, label, color = '#6366f1', unit = '%' }: GaugeProps) => {
   const data = useMemo(() => [
     { value: value > 100 ? 100 : value },
     { value: 100 - (value > 100 ? 100 : value) },

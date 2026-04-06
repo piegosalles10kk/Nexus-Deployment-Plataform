@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
   FolderGit2, Cloud, CheckCircle2, XCircle, PauseCircle,
-  GitCommit, FlaskConical, TrendingUp, Activity, Rocket, BarChart3,
+  GitCommit, FlaskConical, TrendingUp, Activity, Rocket,
   Plus, Loader2, Monitor, X,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';

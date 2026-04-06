@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Layout, Monitor, HardDrive, Wifi, Rocket, Plus, Loader2 } from 'lucide-react';
 import api from '../../services/api';
@@ -8,7 +8,7 @@ interface AddWidgetModalProps {
   onAdd: (widget: any) => void;
 }
 
-export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({ onClose, onAdd }) => {
+export const AddWidgetModal = ({ onClose, onAdd }: AddWidgetModalProps) => {
   const [step, setStep] = useState(1);
   const [type, setType] = useState<string | null>(null);
   const [nodes, setNodes] = useState<any[]>([]);
