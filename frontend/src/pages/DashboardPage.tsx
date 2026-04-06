@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Responsive } from 'react-grid-layout';
-// @ts-ignore
-import WidthProvider from 'react-grid-layout/build/WidthProvider';
+import { Responsive, useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
@@ -16,9 +14,6 @@ import { StoragePieWidget } from '../components/dashboard/widgets/StoragePieWidg
 import { NetworkLineWidget } from '../components/dashboard/widgets/NetworkLineWidget';
 import { ProjectMiniWidget } from '../components/dashboard/widgets/ProjectMiniWidget';
 import { AddWidgetModal } from '../components/dashboard/AddWidgetModal';
-
-// @ts-ignore
-const ResponsiveGridLayout = WidthProvider(Responsive);
 
 interface Widget {
   id: string;
@@ -39,6 +34,9 @@ export default function DashboardPage() {
   const [networkHistory, setNetworkHistory] = useState<Record<string, any[]>>({});
   const socketRef = useRef<any>(null);
   const { user } = useAuth();
+  
+  // Use the modern width provider hook
+  const { width, containerRef, mounted } = useContainerWidth();
 
   // Load widgets from backend
   const loadWidgets = useCallback(async () => {
@@ -115,7 +113,7 @@ export default function DashboardPage() {
   const handleLayoutChange = async (currentLayout: any[]) => {
     if (loading || widgets.length === 0) return;
 
-    const updates = currentLayout.map((l) => ({
+    const updates = currentLayout.map((l: any) => ({
       id: l.i,
       x: l.x,
       y: l.y,
@@ -181,7 +179,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Grid Container */}
-      <div className="bg-bg-secondary/20 rounded-2xl border border-dashed border-border min-h-[600px] p-2">
+      <div ref={containerRef as any} className="bg-bg-secondary/20 rounded-2xl border border-dashed border-border min-h-[600px] p-2">
         {widgets.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-32 text-center opacity-60">
             <Settings2 className="w-12 h-12 text-text-muted mb-4" />
@@ -191,28 +189,31 @@ export default function DashboardPage() {
             </p>
           </div>
         ) : (
-          <ResponsiveGridLayout
-            className="layout"
-            layouts={{ lg: widgets.map(w => ({ i: w.id, x: w.x, y: w.y, w: w.w, h: w.h })) }}
-            breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-            cols={{ lg: 4, md: 3, sm: 2, xs: 1, xxs: 1 }}
-            rowHeight={180}
-            draggableHandle=".drag-handle"
-            onLayoutChange={handleLayoutChange}
-            margin={[16, 16]}
-          >
-            {widgets.map((widget) => (
-              <div key={widget.id}>
-                <BaseWidget
-                  title={widget.title}
-                  onRemove={() => handleRemoveWidget(widget.id)}
-                  dragHandleClass="drag-handle"
-                >
-                  {renderWidgetContent(widget)}
-                </BaseWidget>
-              </div>
-            ))}
-          </ResponsiveGridLayout>
+          mounted && (
+            <Responsive
+              className="layout"
+              layouts={{ lg: widgets.map(w => ({ i: w.id, x: w.x, y: w.y, w: w.w, h: w.h })) }}
+              breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+              cols={{ lg: 4, md: 3, sm: 2, xs: 1, xxs: 1 }}
+              rowHeight={180}
+              dragConfig={{ handle: '.drag-handle' }}
+              onLayoutChange={(layout) => handleLayoutChange(layout as any[])}
+              margin={[16, 16]}
+              width={width}
+            >
+              {widgets.map((widget) => (
+                <div key={widget.id}>
+                  <BaseWidget
+                    title={widget.title}
+                    onRemove={() => handleRemoveWidget(widget.id)}
+                    dragHandleClass="drag-handle"
+                  >
+                    {renderWidgetContent(widget)}
+                  </BaseWidget>
+                </div>
+              ))}
+            </Responsive>
+          )
         )}
       </div>
 
