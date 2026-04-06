@@ -32,8 +32,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install Docker CLI, Git and Terraform
-RUN apk add --no-cache docker-cli git curl unzip && \
+# Install Docker CLI, Git, Terraform and OpenSSL
+RUN apk add --no-cache docker-cli git curl unzip openssl && \
     curl -sSL https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip -o terraform.zip && \
     unzip terraform.zip && \
     mv terraform /usr/local/bin/ && \
