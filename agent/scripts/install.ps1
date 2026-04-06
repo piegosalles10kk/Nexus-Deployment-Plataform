@@ -56,9 +56,18 @@ $headers = @{
     "Content-Type"  = "application/json"
 }
 
+# The permanent agent token returned by enrollment is a long-lived JWT that the
+# agent uses for all WebSocket connections. Fall back to the short-lived enrollment
+# token if the call fails so the agent can at least run until it expires.
+$agentToken = $token
 try {
-    Invoke-RestMethod -Uri $enrollUrl -Method Post -Headers $headers -ErrorAction Stop | Out-Null
-    Write-Host "[Nexus] Enrollment successful."
+    $enrollResp = Invoke-RestMethod -Uri $enrollUrl -Method Post -Headers $headers -ErrorAction Stop
+    if ($enrollResp.data.nodeToken) {
+        $agentToken = $enrollResp.data.nodeToken
+        Write-Host "[Nexus] Enrollment successful. Permanent token obtained."
+    } else {
+        Write-Host "[Nexus] Enrollment succeeded but no token returned; using enrollment token."
+    }
 } catch {
     Write-Host "[Nexus] Enrollment note: " + $_.Exception.Message
 }
@@ -67,7 +76,7 @@ Write-Host "[Nexus] Cleaning up existing service (if any)..."
 Start-Process -FilePath $binPath -ArgumentList "-service uninstall" -Wait -NoNewWindow -ErrorAction SilentlyContinue
 
 Write-Host "[Nexus] Installing as Windows service..."
-$installArgs = "-service install -master """ + $master + """ -token """ + $token + """"
+$installArgs = "-service install -master """ + $master + """ -token """ + $agentToken + """"
 Start-Process -FilePath $binPath -ArgumentList $installArgs -Wait -NoNewWindow
 
 Write-Host "[Nexus] Starting service..."

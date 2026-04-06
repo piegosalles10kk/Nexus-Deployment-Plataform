@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"time"
 
 	"github.com/10kk/agent/internal/docker"
@@ -213,8 +214,13 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 				}
 			}
 
-			// Simple exec.Command execution using sh -c
-			import_exec := exec.Command("sh", "-c", msg.Command)
+			// Use the OS-appropriate shell.
+			var import_exec *exec.Cmd
+			if runtime.GOOS == "windows" {
+				import_exec = exec.Command("cmd", "/C", msg.Command)
+			} else {
+				import_exec = exec.Command("sh", "-c", msg.Command)
+			}
 			
 			// We stream stdout/stderr live
 			stdout, err := import_exec.StdoutPipe()

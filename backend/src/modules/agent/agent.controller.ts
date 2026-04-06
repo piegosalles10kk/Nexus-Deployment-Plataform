@@ -43,8 +43,16 @@ export async function enrollAgent(req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    // Return the node's persistent token so the agent can authenticate the WS connection
-    res.json({ status: 'success', data: { nodeToken: node.token } });
+    // Issue a long-lived JWT the agent will use for all future WS connections.
+    // The WS server authenticates agents with jwt.verify(), so we need a proper
+    // JWT here — the raw node.token (random hex) cannot be verified that way.
+    const agentToken = jwt.sign(
+      { nodeId: node.id },
+      env.JWT_SECRET,
+      // No expiry — the token is tied to this node and revoked by deleting the node.
+    );
+
+    res.json({ status: 'success', data: { nodeToken: agentToken } });
   } catch (error) {
     next(error);
   }
