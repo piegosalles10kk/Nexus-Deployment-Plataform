@@ -9,10 +9,8 @@ import { io } from 'socket.io-client';
 
 import { Plus, LayoutDashboard, Loader2, Settings2 } from 'lucide-react';
 import { BaseWidget } from '../components/dashboard/widgets/BaseWidget';
-import { GaugeWidget } from '../components/dashboard/widgets/GaugeWidget';
-import { StoragePieWidget } from '../components/dashboard/widgets/StoragePieWidget';
-import { NetworkLineWidget } from '../components/dashboard/widgets/NetworkLineWidget';
 import { ProjectMiniWidget } from '../components/dashboard/widgets/ProjectMiniWidget';
+import { ServerCardWidget } from '../components/dashboard/widgets/ServerCardWidget';
 import { AddWidgetModal } from '../components/dashboard/AddWidgetModal';
 
 interface Widget {
@@ -132,14 +130,14 @@ export default function DashboardPage() {
     const nodeData = telemetry[widget.settings?.nodeId] || {};
     
     switch (widget.type) {
-      case 'SERVER_GAUGE_CPU':
-        return <GaugeWidget value={nodeData.cpuUsage || 0} label="CPU" color="#6366f1" />;
-      case 'SERVER_GAUGE_RAM':
-        return <GaugeWidget value={nodeData.ramUsage || 0} label="RAM" color="#818cf8" />;
-      case 'SERVER_STORAGE':
-        return <StoragePieWidget used={nodeData.diskUsed || 0} total={nodeData.diskTotal || 1} />;
-      case 'SERVER_NETWORK':
-        return <NetworkLineWidget data={networkHistory[widget.settings?.nodeId] || []} />;
+      case 'SERVER_CARD':
+        return (
+          <ServerCardWidget 
+            nodeId={widget.settings?.nodeId} 
+            telemetryData={nodeData} 
+            networkHistory={networkHistory[widget.settings?.nodeId] || []} 
+          />
+        );
       case 'PROJECT_STATUS':
         return <ProjectMiniWidget projectId={widget.settings?.projectId} />;
       default:

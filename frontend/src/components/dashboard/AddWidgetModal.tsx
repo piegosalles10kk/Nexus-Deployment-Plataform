@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Layout, Monitor, HardDrive, Wifi, Rocket, Plus, Loader2 } from 'lucide-react';
+import { X, Monitor, Rocket, Plus, Loader2 } from 'lucide-react';
 import api from '../../services/api';
 
 interface AddWidgetModalProps {
@@ -36,10 +36,7 @@ export const AddWidgetModal = ({ onClose, onAdd }: AddWidgetModalProps) => {
   }, []);
 
   const widgetTypes = [
-    { id: 'SERVER_GAUGE_CPU', name: 'Velocímetro CPU', icon: Monitor, color: 'text-accent', description: 'Monitoramento em tempo real do processador' },
-    { id: 'SERVER_GAUGE_RAM', name: 'Velocímetro RAM', icon: Layout, color: 'text-indigo-400', description: 'Monitoramento em tempo real da memória' },
-    { id: 'SERVER_STORAGE', name: 'Armazenamento Pizza', icon: HardDrive, color: 'text-danger', description: 'Uso de disco em gráfico de pizza' },
-    { id: 'SERVER_NETWORK', name: 'Tráfego de Rede', icon: Wifi, color: 'text-success', description: 'Gráfico linear de TX/RX' },
+    { id: 'SERVER_CARD', name: 'Servidor Completo', icon: Monitor, color: 'text-accent', description: 'Painel unificado com CPU, RAM, HD e Rede' },
     { id: 'PROJECT_STATUS', name: 'Status de Projeto', icon: Rocket, color: 'text-accent-light', description: 'Acompanhamento compacto de um projeto' },
   ];
 
@@ -55,8 +52,8 @@ export const AddWidgetModal = ({ onClose, onAdd }: AddWidgetModalProps) => {
       type,
       title: widgetTypes.find(t => t.id === type)?.name || 'Novo Widget',
       settings: type.startsWith('SERVER_') ? { nodeId: selectedTarget } : { projectId: selectedTarget },
-      w: type === 'SERVER_NETWORK' ? 2 : 1,
-      h: type === 'SERVER_NETWORK' ? 1 : 1,
+      w: type === 'SERVER_CARD' ? 4 : 1,
+      h: type === 'SERVER_CARD' ? 1 : 1,
     };
 
     onAdd(widget);
