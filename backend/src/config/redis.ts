@@ -2,20 +2,35 @@ import { createClient, RedisClientType } from 'redis';
 import { env } from './env';
 
 let redisClient: RedisClientType | null = null;
+let redisPromise: Promise<RedisClientType> | null = null;
 
 export const getRedisClient = async (): Promise<RedisClientType> => {
   if (redisClient && redisClient.isOpen) {
     return redisClient;
   }
 
-  redisClient = createClient({
-    url: env.REDIS_URL,
-  });
+  if (redisPromise) {
+    return redisPromise;
+  }
 
-  redisClient.on('error', (err) => console.error('Redis Client Error', err));
+  redisPromise = (async () => {
+    const client = createClient({
+      url: env.REDIS_URL,
+    });
 
-  await redisClient.connect();
-  return redisClient;
+    client.on('error', (err) => console.error('Redis Client Error', err));
+
+    await client.connect();
+    redisClient = client as RedisClientType;
+    return redisClient;
+  })();
+
+  try {
+    const client = await redisPromise;
+    return client;
+  } finally {
+    redisPromise = null;
+  }
 };
 
 export const closeRedis = async () => {

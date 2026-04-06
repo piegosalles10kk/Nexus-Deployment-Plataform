@@ -125,6 +125,7 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
 
         case 'telemetry':
           // Save to Redis (capped to last 100 entries)
+          console.log(`📊 Telemetry received from nodeId=${nodeId}`);
           getRedisClient().then((redis) => {
             const key = `node:${nodeId}:telemetry`;
             const m = redis.multi();
@@ -132,8 +133,10 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
             m.lPush(key, JSON.stringify(msg.payload));
             // LTRIM keeps indices 0 to 99
             m.lTrim(key, 0, 99);
-            m.exec().catch(err => console.error('Redis telemetry save failed', err));
-          }).catch(() => {});
+            m.exec().catch(err => console.error(`[redis] exec failed for nodeId=${nodeId}:`, err));
+          }).catch(err => {
+            console.error(`[redis] connection failed for nodeId=${nodeId}:`, err);
+          });
 
           // Broadcast to connected web clients
           io.emit('node:telemetry', { nodeId, data: msg.payload });
