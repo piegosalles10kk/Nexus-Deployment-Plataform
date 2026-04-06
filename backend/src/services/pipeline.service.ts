@@ -26,7 +26,8 @@ export interface PipelineContext {
   repoUrl: string;
   branch: string;
   projectName: string;
-  environmentType: 'LOCAL' | 'CLOUD';
+  environmentType: 'LOCAL' | 'CLOUD' | 'NODE';
+  nodeId?: string;
   commitHash?: string;
   commitMsg?: string;
   io: SocketServer;
@@ -382,28 +383,37 @@ async function runAutomaticDockerPipeline(
 
 // ─── Cloud (agent WebSocket) pipeline ────────────────────────────────────────
 
-async function runCloudPipeline(ctx: PipelineContext): Promise<void> {
-  emitLog(ctx, 'cloud-dispatch', 'Roteando deploy para agente cloud…', 'info');
+async function runRemotePipeline(ctx: PipelineContext): Promise<void> {
+  const stepLabel = ctx.environmentType === 'NODE' ? 'node-dispatch' : 'cloud-dispatch';
+  emitLog(ctx, stepLabel, `Roteando deploy para agente ${ctx.environmentType === 'NODE' ? 'direto' : 'cloud'}…`, 'info');
 
-  // Resolve the cloud server and timeout config for this project
-  const project = await prisma.project.findUnique({
-    where: { id: ctx.projectId },
-    select: { cloudServerId: true, deployTimeoutMin: true },
-  });
-  if (!project?.cloudServerId) {
-    throw new Error('Projeto não possui servidor cloud configurado.');
+  let nodeId = ctx.nodeId;
+
+  if (ctx.environmentType === 'CLOUD') {
+    // Resolve the cloud server and timeout config for this project
+    const project = await prisma.project.findUnique({
+      where: { id: ctx.projectId },
+      select: { cloudServerId: true },
+    });
+    if (!project?.cloudServerId) {
+      throw new Error('Projeto não possui servidor cloud configurado.');
+    }
+
+    // Find the connected Node for this cloud server via NODE_ID_<serverId> setting
+    const settingKey = `NODE_ID_${project.cloudServerId}`;
+    const setting = await prisma.systemSetting.findUnique({ where: { key: settingKey } }).catch(() => null);
+    nodeId = setting?.value;
+
+    if (!nodeId) {
+      throw new Error(
+        `Agente não encontrado para o servidor ${project.cloudServerId} ` +
+        `(setting: ${settingKey} não configurado).`,
+      );
+    }
   }
 
-  // Find the connected Node for this cloud server via NODE_ID_<serverId> setting
-  const settingKey = `NODE_ID_${project.cloudServerId}`;
-  const setting = await prisma.systemSetting.findUnique({ where: { key: settingKey } }).catch(() => null);
-  const nodeId = setting?.value;
-
   if (!nodeId) {
-    throw new Error(
-      `Agente não encontrado para o servidor ${project.cloudServerId} ` +
-      `(setting: ${settingKey} não configurado).`,
-    );
+    throw new Error('ID do agente não definido para este deploy.');
   }
 
   const agentSocket = getAgentSocket(nodeId);
@@ -417,7 +427,7 @@ async function runCloudPipeline(ctx: PipelineContext): Promise<void> {
   // Fetch proxy labels + health check config
   const projectConfig = await prisma.project.findUnique({
     where: { id: ctx.projectId },
-    select: { proxyHost: true, proxyPort: true, healthCheckUrl: true, healthCheckDelay: true },
+    select: { proxyHost: true, proxyPort: true, healthCheckUrl: true, healthCheckDelay: true, deployTimeoutMin: true },
   });
 
   // Send deploy command (agentSocket is verified non-null above)
@@ -435,14 +445,14 @@ async function runCloudPipeline(ctx: PipelineContext): Promise<void> {
     healthCheckUrl:   projectConfig?.healthCheckUrl ?? '',
     healthCheckDelay: projectConfig?.healthCheckDelay ?? 15,
   }));
-  emitLog(ctx, 'cloud-dispatch', `Comando de deploy enviado ao agente ${nodeId}`, 'info');
+  emitLog(ctx, stepLabel, `Comando de deploy enviado ao agente ${nodeId}`, 'info');
 
   // Stream logs and wait for completion (per-project configurable timeout)
-  const timeoutMs = (project?.deployTimeoutMin ?? 10) * 60 * 1_000;
+  const timeoutMs = (projectConfig?.deployTimeoutMin ?? 10) * 60 * 1_000;
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       ws.removeListener('message', onMessage);
-      reject(new Error(`Cloud deploy expirou após ${project?.deployTimeoutMin ?? 10} minutos`));
+      reject(new Error(`Deploy remoto expirou após ${projectConfig?.deployTimeoutMin ?? 10} minutos`));
     }, timeoutMs);
 
     function onMessage(data: Buffer | string) {
@@ -450,21 +460,21 @@ async function runCloudPipeline(ctx: PipelineContext): Promise<void> {
       try { msg = JSON.parse(data.toString()); } catch { return; }
 
       if (msg.type === 'log_line') {
-        emitLog(ctx, 'cloud-agent', String(msg.message ?? msg.data ?? ''), 'info');
+        emitLog(ctx, 'agent-logs', String(msg.message ?? msg.data ?? ''), 'info');
       } else if (msg.type === 'deploy_done') {
         clearTimeout(timeout);
         ws.removeListener('message', onMessage);
-        emitLog(ctx, 'cloud-dispatch', 'Deploy cloud concluído com sucesso.', 'success');
+        emitLog(ctx, stepLabel, 'Deploy concluído com sucesso no servidor remoto.', 'success');
         resolve();
       } else if (msg.type === 'deploy_rolled_back') {
         clearTimeout(timeout);
         ws.removeListener('message', onMessage);
-        emitLog(ctx, 'cloud-dispatch', 'Deploy falhou no servidor remoto — versão anterior restaurada.', 'warning');
+        emitLog(ctx, stepLabel, 'Deploy falhou no servidor remoto — versão anterior restaurada.', 'warning');
         reject(new RolledBackError(String(msg.message ?? 'Deploy falhou; versão anterior restaurada.')));
       } else if (msg.type === 'deploy_failed') {
         clearTimeout(timeout);
         ws.removeListener('message', onMessage);
-        reject(new Error(String(msg.message ?? 'Cloud deploy falhou')));
+        reject(new Error(String(msg.message ?? 'Deploy remoto falhou')));
       }
     }
 
@@ -529,8 +539,8 @@ export async function runPipeline(ctx: PipelineContext): Promise<void> {
 
     if (stepCount > 0) {
       await runWorkflowSteps(ctx);
-    } else if (ctx.environmentType === 'CLOUD') {
-      await runCloudPipeline(ctx);
+    } else if (ctx.environmentType === 'CLOUD' || ctx.environmentType === 'NODE') {
+      await runRemotePipeline(ctx);
     } else {
       const results = await runAutomaticDockerPipeline(ctx);
       testsPassed = results.testsPassed;

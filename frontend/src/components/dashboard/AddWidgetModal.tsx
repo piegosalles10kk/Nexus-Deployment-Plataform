@@ -48,9 +48,13 @@ export const AddWidgetModal = ({ onClose, onAdd }: AddWidgetModalProps) => {
   const handleConfirm = () => {
     if (!type || !selectedTarget) return;
 
+    const targetName = type.startsWith('SERVER_') 
+      ? nodes.find(n => n.id === selectedTarget)?.name 
+      : projects.find(p => p.id === selectedTarget)?.name;
+
     const widget = {
       type,
-      title: widgetTypes.find(t => t.id === type)?.name || 'Novo Widget',
+      title: targetName || widgetTypes.find(t => t.id === type)?.name || 'Novo Widget',
       settings: type.startsWith('SERVER_') ? { nodeId: selectedTarget } : { projectId: selectedTarget },
       w: type === 'SERVER_CARD' ? 2 : 1,
       h: type === 'SERVER_CARD' ? 2 : 1,

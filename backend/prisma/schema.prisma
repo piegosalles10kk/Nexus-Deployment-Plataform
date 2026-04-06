@@ -16,6 +16,7 @@ enum Role {
 enum EnvironmentType {
   LOCAL
   CLOUD
+  NODE
 }
 
 enum ProjectStatus {
@@ -90,6 +91,8 @@ model Project {
   healthCheckUrl    String?              @map("health_check_url")
   cloudServerId     String?              @map("cloud_server_id")
   cloudServer       CloudServer?         @relation(fields: [cloudServerId], references: [id], onDelete: SetNull)
+  nodeId            String?              @map("node_id")
+  node              Node?                @relation(fields: [nodeId], references: [id], onDelete: SetNull)
   secrets           ProjectSecret[]
   deploys           DeployHistory[]
   steps             WorkflowStep[]
@@ -220,6 +223,7 @@ model Node {
   ipAddress   String?    @map("ip_address")
   lastPing    DateTime   @updatedAt @map("last_ping")
   createdAt   DateTime   @default(now()) @map("created_at")
+  projects    Project[]
 
   @@map("nodes")
 }

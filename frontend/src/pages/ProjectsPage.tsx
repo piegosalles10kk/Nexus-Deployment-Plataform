@@ -234,15 +234,48 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [repoUrl, setRepoUrl] = useState('');
   const [branch, setBranch] = useState('main');
   const [envType, setEnvType] = useState('LOCAL');
+  const [nodes, setNodes] = useState<any[]>([]);
+  const [loadingNodes, setLoadingNodes] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchNodes = async () => {
+      setLoadingNodes(true);
+      try {
+        const res = await api.get('/v1/agent/nodes');
+        setNodes(res.data.data.nodes);
+      } catch (err) {
+        console.error('Falha ao carregar nodes:', err);
+      } finally {
+        setLoadingNodes(false);
+      }
+    };
+    fetchNodes();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    // Determine the environment type and nodeId
+    let finalEnvType = envType;
+    let nodeId = null;
+
+    if (envType !== 'LOCAL' && envType !== 'CLOUD') {
+      finalEnvType = 'NODE';
+      nodeId = envType; // The value is the nodeId
+    }
+
     try {
-      await api.post('/projects', { name, repoUrl, branchTarget: branch, environmentType: envType });
+      await api.post('/projects', { 
+        name, 
+        repoUrl, 
+        branchTarget: branch, 
+        environmentType: finalEnvType,
+        nodeId
+      });
       onCreated();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Falha ao criar o projeto');
@@ -294,10 +327,26 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
                 className={inputClass} />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Ambiente</label>
-              <select value={envType} onChange={(e) => setEnvType(e.target.value)} className={inputClass}>
-                <option value="LOCAL">Local</option>
-                <option value="CLOUD">Cloud (Universal)</option>
+              <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Ambiente de Destino</label>
+              <select 
+                value={envType} 
+                onChange={(e) => setEnvType(e.target.value)} 
+                className={inputClass}
+                disabled={loadingNodes}
+              >
+                <optgroup label="Infraestrutura Nexus">
+                  <option value="LOCAL">Servidor Local (Nexus Principal)</option>
+                  <option value="CLOUD">Cloud (Universal / SSH)</option>
+                </optgroup>
+                {nodes.length > 0 && (
+                  <optgroup label="Agentes Conectados">
+                    {nodes.map(node => (
+                      <option key={node.id} value={node.id}>
+                        {node.name} ({node.status})
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
           </div>

@@ -16,8 +16,8 @@ export type SaveWorkflowInput = z.infer<typeof saveWorkflowSchema>;
 export const createProjectSchema = z.object({
   name: z.string().min(2),
   repoUrl: z.string().url('Must be a valid URL'),
-  branchTarget: z.string().default('main'),
-  environmentType: z.enum(['LOCAL', 'CLOUD']).default('LOCAL'),
+  environmentType: z.enum(['LOCAL', 'CLOUD', 'NODE']).default('LOCAL'),
+  nodeId: z.string().uuid().optional(),
 });
 
 export const updateProjectSchema = z.object({
@@ -35,6 +35,7 @@ export const updateProjectSchema = z.object({
   proxyHost: z.string().nullable().optional(),
   proxyPort: z.number().int().positive().nullable().optional(),
   cloudServerId: z.string().uuid().nullable().optional(),
+  nodeId: z.string().uuid().nullable().optional(),
 });
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;

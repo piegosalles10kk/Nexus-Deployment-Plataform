@@ -6,14 +6,18 @@ interface BaseWidgetProps {
   onRemove?: () => void;
   children: ReactNode;
   dragHandleClass?: string;
+  onClick?: () => void;
 }
 
-export const BaseWidget = ({ title, onRemove, children, dragHandleClass }: BaseWidgetProps) => {
+export const BaseWidget = ({ title, onRemove, children, dragHandleClass, onClick }: BaseWidgetProps) => {
   return (
-    <div className="h-full bg-bg-card border border-border rounded-xl flex flex-col overflow-hidden group shadow-sm hover:shadow-md transition-shadow">
+    <div 
+      onClick={onClick}
+      className={`h-full bg-bg-card border border-border rounded-xl flex flex-col overflow-hidden group shadow-sm hover:shadow-md transition-shadow ${onClick ? 'cursor-pointer hover:border-accent/40' : ''}`}
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-bg-secondary/30 border-b border-border">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <div className={`${dragHandleClass} cursor-grab active:cursor-grabbing p-1 -ml-1 text-text-muted hover:text-text-primary transition-colors`}>
             <GripVertical className="w-3.5 h-3.5" />
           </div>
@@ -23,7 +27,10 @@ export const BaseWidget = ({ title, onRemove, children, dragHandleClass }: BaseW
         </div>
         {onRemove && (
           <button
-            onClick={onRemove}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
             className="p-1 rounded-md text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
           >
             <X className="w-3.5 h-3.5" />

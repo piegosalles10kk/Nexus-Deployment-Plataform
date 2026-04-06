@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Responsive, useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   const [networkHistory, setNetworkHistory] = useState<Record<string, any[]>>({});
   const socketRef = useRef<any>(null);
   const { user } = useAuth();
+  const navigate = useNavigate();
   
   // Use the modern width provider hook
   const { width, containerRef, mounted } = useContainerWidth();
@@ -205,6 +207,13 @@ export default function DashboardPage() {
                     title={widget.title}
                     onRemove={() => handleRemoveWidget(widget.id)}
                     dragHandleClass="drag-handle"
+                    onClick={() => {
+                      if (widget.type === 'SERVER_CARD' && widget.settings?.nodeId) {
+                        navigate(`/cloud/servers/${widget.settings.nodeId}`);
+                      } else if (widget.type === 'PROJECT_STATUS' && widget.settings?.projectId) {
+                        navigate(`/project/${widget.settings.projectId}`);
+                      }
+                    }}
                   >
                     {renderWidgetContent(widget)}
                   </BaseWidget>
