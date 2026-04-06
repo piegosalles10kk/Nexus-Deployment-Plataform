@@ -5,6 +5,7 @@ package fs
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,4 +128,88 @@ func WriteFile(imageName, relPath, content string) error {
 	}
 
 	return os.WriteFile(abs, []byte(content), 0644)
+}
+
+// DeleteFile removes the file or directory at relPath (recursive).
+func DeleteFile(imageName, relPath string) error {
+	abs, err := safeAbs(imageName, relPath)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(abs)
+}
+
+// CopyFile duplicates the file or directory at srcRel to dstRel (recursive).
+func CopyFile(imageName, srcRel, dstRel string) error {
+	src, err := safeAbs(imageName, srcRel)
+	if err != nil {
+		return err
+	}
+	dst, err := safeAbs(imageName, dstRel)
+	if err != nil {
+		return err
+	}
+
+	info, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("copy source stat: %w", err)
+	}
+
+	if info.IsDir() {
+		return copyDir(src, dst)
+	}
+	return copyFile(src, dst)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
+}
+
+func copyDir(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(dst, info.Mode()); err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcChild := filepath.Join(src, entry.Name())
+		dstChild := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			if err := copyDir(srcChild, dstChild); err != nil {
+				return err
+			}
+		} else {
+			if err := copyFile(srcChild, dstChild); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

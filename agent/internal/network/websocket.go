@@ -63,6 +63,7 @@ type inboundMsg struct {
 	EndPort   int `json:"endPort,omitempty"`
 	// file-manager fields
 	FilePath    string `json:"filePath,omitempty"`
+	DestPath    string `json:"destPath,omitempty"`
 	FileContent string `json:"fileContent,omitempty"`
 }
 
@@ -511,6 +512,42 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 				return
 			}
 			send(map[string]any{"type": "file_write_result", "requestId": msg.RequestID, "success": true})
+		}()
+
+	case "delete_file":
+		go func() {
+			send := func(v any) {
+				b, _ := json.Marshal(v)
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+			if err := agentfs.DeleteFile(msg.ImageName, msg.FilePath); err != nil {
+				send(map[string]any{"type": "file_delete_result", "requestId": msg.RequestID, "success": false, "error": err.Error()})
+				return
+			}
+			send(map[string]any{"type": "file_delete_result", "requestId": msg.RequestID, "success": true})
+		}()
+
+	case "copy_file":
+		go func() {
+			send := func(v any) {
+				b, _ := json.Marshal(v)
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+			if msg.DestPath == "" {
+				send(map[string]any{"type": "file_copy_result", "requestId": msg.RequestID, "success": false, "error": "destPath required"})
+				return
+			}
+			if err := agentfs.CopyFile(msg.ImageName, msg.FilePath, msg.DestPath); err != nil {
+				send(map[string]any{"type": "file_copy_result", "requestId": msg.RequestID, "success": false, "error": err.Error()})
+				return
+			}
+			send(map[string]any{"type": "file_copy_result", "requestId": msg.RequestID, "success": true})
 		}()
 
 	default:

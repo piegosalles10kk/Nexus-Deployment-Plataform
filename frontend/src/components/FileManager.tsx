@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import {
   Folder, FolderOpen, FileText, ChevronRight, Loader2,
-  Save, AlertCircle, CheckCircle2, RefreshCw,
+  Save, AlertCircle, CheckCircle2, RefreshCw, Trash2, Copy,
 } from 'lucide-react';
 
 interface FileEntry {
@@ -96,12 +96,41 @@ export default function FileManager({ projectId, canEdit }: Props) {
     }
   };
 
+  const deletePath = async (path: string) => {
+    if (!confirm(`Excluir "${path}" permanentemente?`)) return;
+    try {
+      await api.delete(`/projects/${projectId}/files`, { params: { path } });
+      // Reload parent or root
+      const parent = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
+      loadDir(parent);
+      if (selectedFile === path) {
+        setSelectedFile(null);
+        setContent('');
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? err.message);
+    }
+  };
+
+  const copyPath = async (path: string) => {
+    const name = path.split('/').pop();
+    const dest = prompt('Novo nome/caminho:', `${path}_copy`);
+    if (!dest) return;
+    try {
+      await api.post(`/projects/${projectId}/files/copy`, { path, dest });
+      const parent = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
+      loadDir(parent);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? err.message);
+    }
+  };
+
   const renderEntries = (entries: FileEntry[], depth = 0) =>
     entries.map((entry) => (
       <div key={entry.path}>
         <button
-          onClick={() => entry.isDir ? toggleDir(entry) : openFile(entry)}
-          className={`w-full flex items-center gap-1.5 px-2 py-1 text-sm rounded-md transition-colors text-left hover:bg-bg-card-hover ${
+          onClick={() => (entry.isDir ? toggleDir(entry) : openFile(entry))}
+          className={`group w-full flex items-center gap-1.5 px-2 py-1 text-sm rounded-md transition-colors text-left hover:bg-bg-card-hover ${
             selectedFile === entry.path ? 'bg-accent/10 text-accent-light' : 'text-text-secondary'
           }`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
@@ -111,10 +140,11 @@ export default function FileManager({ projectId, canEdit }: Props) {
               <ChevronRight
                 className={`w-3.5 h-3.5 shrink-0 transition-transform ${expanded[entry.path] ? 'rotate-90' : ''}`}
               />
-              {expanded[entry.path]
-                ? <FolderOpen className="w-4 h-4 shrink-0 text-yellow-400" />
-                : <Folder className="w-4 h-4 shrink-0 text-yellow-400" />
-              }
+              {expanded[entry.path] ? (
+                <FolderOpen className="w-4 h-4 shrink-0 text-yellow-400" />
+              ) : (
+                <Folder className="w-4 h-4 shrink-0 text-yellow-400" />
+              )}
             </>
           ) : (
             <>
@@ -123,9 +153,35 @@ export default function FileManager({ projectId, canEdit }: Props) {
             </>
           )}
           <span className="truncate">{entry.name}</span>
-          {loadingPath === entry.path && (
-            <Loader2 className="w-3 h-3 animate-spin ml-auto shrink-0" />
-          )}
+          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {canEdit && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyPath(entry.path);
+                  }}
+                  className="p-1 rounded hover:bg-bg-primary text-text-muted hover:text-accent transition-colors"
+                  title="Duplicar"
+                >
+                  <Copy className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deletePath(entry.path);
+                  }}
+                  className="p-1 rounded hover:bg-bg-primary text-text-muted hover:text-danger transition-colors"
+                  title="Excluir"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </>
+            )}
+            {loadingPath === entry.path && <Loader2 className="w-3 h-3 animate-spin shrink-0" />}
+          </div>
         </button>
         {entry.isDir && expanded[entry.path] && (
           <div>{renderEntries(expanded[entry.path], depth + 1)}</div>

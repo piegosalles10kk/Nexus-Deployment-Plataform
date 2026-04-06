@@ -163,6 +163,20 @@ export function writeProjectFile(nodeId: string, imageName: string, filePath: st
   );
 }
 
+export function copyProjectFile(nodeId: string, imageName: string, filePath: string, destPath: string): Promise<void> {
+  return sendAgentRequest(
+    nodeId,
+    { type: 'command', action: 'copy_file', imageName, filePath, destPath },
+  );
+}
+
+export function deleteProjectFile(nodeId: string, imageName: string, filePath: string): Promise<void> {
+  return sendAgentRequest(
+    nodeId,
+    { type: 'command', action: 'delete_file', imageName, filePath },
+  );
+}
+
 /**
  * Sends an HTTP request through the named agent's WebSocket tunnel and
  * returns the proxied response.  Rejects if the agent is offline or the
@@ -394,7 +408,9 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
         case 'container_action_result':
         case 'file_list':
         case 'file_content':
-        case 'file_write_result': {
+        case 'file_write_result':
+        case 'file_delete_result':
+        case 'file_copy_result': {
           const pending = pendingAgentResponses.get(msg.requestId);
           if (pending) {
             pendingAgentResponses.delete(msg.requestId);

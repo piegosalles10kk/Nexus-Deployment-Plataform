@@ -8,6 +8,8 @@ import {
   listProjectFiles,
   readProjectFile,
   writeProjectFile,
+  copyProjectFile,
+  deleteProjectFile,
 } from '../../services/agent-ws.service';
 
 export async function listProjects(req: Request, res: Response, next: NextFunction) {
@@ -146,6 +148,36 @@ export async function updateFile(req: Request<{ id: string }>, res: Response, ne
     }
     await writeProjectFile(project.nodeId!, imageName, filePath, content);
     res.json({ status: 'success', message: 'Arquivo salvo' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function copyFile(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    const { path: filePath, dest: destPath } = req.body;
+    if (!filePath || !destPath) {
+      res.status(400).json({ status: 'error', message: 'path and dest are required' });
+      return;
+    }
+    await copyProjectFile(project.nodeId!, imageName, filePath, destPath);
+    res.json({ status: 'success', message: 'Arquivo copiado' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteFile(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    const filePath = (req.query.path as string) ?? '';
+    if (!filePath) {
+      res.status(400).json({ status: 'error', message: 'path query param required' });
+      return;
+    }
+    await deleteProjectFile(project.nodeId!, imageName, filePath);
+    res.json({ status: 'success', message: 'Arquivo excluído' });
   } catch (error) {
     next(error);
   }

@@ -28,5 +28,7 @@ router.post('/:id/restart', authorize('ADM', 'TECNICO'), projectsController.rest
 router.get('/:id/files',         authenticate, projectsController.listFiles);
 router.get('/:id/files/content', authenticate, projectsController.getFileContent);
 router.put('/:id/files/content', authorize('ADM', 'TECNICO'), projectsController.updateFile);
+router.post('/:id/files/copy', authorize('ADM', 'TECNICO'), projectsController.copyFile);
+router.delete('/:id/files', authorize('ADM', 'TECNICO'), projectsController.deleteFile);
 
 export default router;
