@@ -91,9 +91,17 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
 
     // 3. Update node status in DB
     const remoteIp = req.socket.remoteAddress ?? undefined;
+    const agentOs = (req.headers['x-agent-os'] as string) || undefined;
+    const agentVersion = (req.headers['x-agent-version'] as string) || undefined;
+    
     prisma.node.update({
       where: { id: nodeId },
-      data:  { status: 'ONLINE', ipAddress: remoteIp },
+      data:  { 
+        status: 'ONLINE', 
+        ipAddress: remoteIp,
+        os: agentOs,
+        version: agentVersion
+      },
     }).catch(console.error);
 
     agentSockets.set(nodeId, ws);
