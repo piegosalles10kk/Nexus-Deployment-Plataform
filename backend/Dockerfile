@@ -34,7 +34,9 @@ WORKDIR /app
 
 # Install Docker CLI, Git, Terraform and OpenSSL
 RUN apk add --no-cache docker-cli git curl unzip openssl && \
-    curl -sSL https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip -o terraform.zip && \
+    curl -sSL --max-time 120 --retry 3 --retry-delay 5 \
+        https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip \
+        -o terraform.zip && \
     unzip terraform.zip && \
     mv terraform /usr/local/bin/ && \
     rm terraform.zip
