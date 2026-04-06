@@ -28,6 +28,7 @@ export interface PipelineContext {
   projectName: string;
   environmentType: 'LOCAL' | 'CLOUD' | 'NODE';
   nodeId?: string;
+  clean?: boolean;
   commitHash?: string;
   commitMsg?: string;
   io: SocketServer;
@@ -444,6 +445,7 @@ async function runRemotePipeline(ctx: PipelineContext): Promise<void> {
     proxyPort:        projectConfig?.proxyPort ?? 0,
     healthCheckUrl:   projectConfig?.healthCheckUrl ?? '',
     healthCheckDelay: projectConfig?.healthCheckDelay ?? 15,
+    clean:            ctx.clean ?? false,
   }));
   emitLog(ctx, stepLabel, `Comando de deploy enviado ao agente ${nodeId}`, 'info');
 

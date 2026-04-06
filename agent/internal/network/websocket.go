@@ -65,6 +65,7 @@ type inboundMsg struct {
 	FilePath    string `json:"filePath,omitempty"`
 	DestPath    string `json:"destPath,omitempty"`
 	FileContent string `json:"fileContent,omitempty"`
+	Clean       bool   `json:"clean,omitempty"`
 }
 
 // RunConnectionLoop dials the master and re-dials on any disconnect.
@@ -409,6 +410,7 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 				ProxyPort:        msg.ProxyPort,
 				HealthCheckURL:   msg.HealthCheckURL,
 				HealthCheckDelay: msg.HealthCheckDelay,
+				Clean:            msg.Clean,
 			}
 
 			result := docker.RunDeploy(ctx, req, logFn)

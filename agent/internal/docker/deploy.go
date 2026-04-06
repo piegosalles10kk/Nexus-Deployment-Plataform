@@ -22,6 +22,7 @@ type DeployRequest struct {
 	ProxyPort        int
 	HealthCheckURL   string
 	HealthCheckDelay int // seconds; 0 → default 15
+	Clean            bool
 }
 
 // DeployResult reports the outcome of a RunDeploy call.
@@ -109,14 +110,23 @@ func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) Deplo
 		}
 	}
 
-	// 4. Clean build cache to ensure a fresh build
-	onLog("▶ docker builder prune -f")
-	_ = runCmd(ctx, onLog, "", GetExecutable("docker"), "builder", "prune", "-f")
+	// 4. Clean build cache if requested
+	if req.Clean {
+		onLog("▶ docker builder prune -f (clean deploy)")
+		_ = runCmd(ctx, onLog, "", GetExecutable("docker"), "builder", "prune", "-f")
+	}
 
-	// 5. Docker build with --no-cache (overwrites current image tag)
-	onLog("▶ docker build --no-cache -t " + req.ImageName)
-	if err := runCmd(ctx, onLog, repoDir,
-		GetExecutable("docker"), "build", "--no-cache", "-t", req.ImageName, "."); err != nil {
+	// 5. Docker build (conditionally use --no-cache)
+	buildArgs := []string{"build"}
+	if req.Clean {
+		buildArgs = append(buildArgs, "--no-cache")
+		onLog("▶ docker build --no-cache -t " + req.ImageName)
+	} else {
+		onLog("▶ docker build -t " + req.ImageName)
+	}
+	buildArgs = append(buildArgs, "-t", req.ImageName, ".")
+
+	if err := runCmd(ctx, onLog, repoDir, GetExecutable("docker"), buildArgs...); err != nil {
 		return DeployResult{Err: fmt.Errorf("docker build: %w", err)}
 	}
 

@@ -212,12 +212,12 @@ export default function ProjectPage() {
     }
   };
 
-  const triggerDeploy = async () => {
+  const triggerDeploy = async (clean = false) => {
     setDeploying(true);
     setLogs([]);
     setActiveTab('Terminal');
     try {
-      const res = await api.post(`/projects/${id}/deploys`);
+      const res = await api.post(`/projects/${id}/deploys`, { clean });
       setCurrentDeployId(res.data.data.deploy.id);
     } catch (err: any) {
       setDeploying(false);
@@ -330,7 +330,16 @@ export default function ProjectPage() {
               </>
             )}
             <button
-              onClick={triggerDeploy}
+              onClick={() => triggerDeploy(true)}
+              disabled={deploying}
+              title="Executa um 'docker system prune' e build sem cache"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-accent/40 text-accent-light hover:bg-accent/8 font-semibold text-sm disabled:opacity-50 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${deploying ? 'animate-spin' : ''}`} />
+              Deploy Limpo
+            </button>
+            <button
+              onClick={() => triggerDeploy(false)}
               disabled={deploying}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-light text-white font-semibold text-sm disabled:opacity-50 transition-colors"
             >
