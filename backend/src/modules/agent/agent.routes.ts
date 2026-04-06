@@ -16,5 +16,14 @@ router.delete('/nodes/:id',         authenticate, authorize('ADM'), agentControl
 router.post(  '/nodes/:id/command', authenticate, authorize('ADM'), agentController.sendCommand);
 router.get(   '/nodes/:id/telemetry', authenticate, authorize('ADM'), agentController.getNodeTelemetry);
 router.get(   '/nodes/:id/scan-ports', authenticate, authorize('ADM', 'TECNICO'), agentController.scanNodePorts);
+router.post(  '/nodes/:id/terminate',  authenticate, authorize('ADM'), agentController.terminateNodeAgent);
+
+// ── File Manager (Global FTP) ───────────────────────────────────────────────────
+router.get(   '/nodes/:id/files',       authenticate, authorize('ADM', 'TECNICO'), agentController.listNodeFiles);
+router.get(   '/nodes/:id/files/read',  authenticate, authorize('ADM', 'TECNICO'), agentController.readNodeFile);
+router.post(  '/nodes/:id/files/write', authenticate, authorize('ADM', 'TECNICO'), agentController.writeNodeFile);
+router.delete('/nodes/:id/files',       authenticate, authorize('ADM', 'TECNICO'), agentController.deleteNodeFile);
+router.post(  '/nodes/:id/files/copy',  authenticate, authorize('ADM', 'TECNICO'), agentController.copyNodeFile);
+router.post(  '/nodes/:id/files/move',  authenticate, authorize('ADM', 'TECNICO'), agentController.moveNodeFile);
 
 export default router;

@@ -29,8 +29,8 @@ const (
 	writeTimeout = 10 * time.Second
 	pingInterval = 15 * time.Second
 
-	// Maximum response body size for the reverse tunnel (5 MB).
-	tunnelMaxBodyBytes = 5 * 1024 * 1024
+	// Maximum response body size for the reverse tunnel and file operations (10 MB).
+	tunnelMaxBodyBytes = 10 * 1024 * 1024
 )
 
 // inboundMsg is the shape of commands received from the master.
@@ -242,8 +242,22 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 			// Use the OS-appropriate shell.
 			var import_exec *exec.Cmd
 			if runtime.GOOS == "windows" {
+				if strings.TrimSpace(msg.Command) == "agent-uninstall-now" {
+					send(map[string]any{"type": "shell_output", "sessionId": msg.SessionID, "message": "⚠️ Removendo Nexus Agent...\n"})
+					exe, _ := os.Executable()
+					exec.Command(exe, "-service", "stop").Run()
+					exec.Command(exe, "-service", "uninstall").Run()
+					os.Exit(0)
+				}
 				import_exec = exec.Command("cmd", "/C", msg.Command)
 			} else {
+				if strings.TrimSpace(msg.Command) == "agent-uninstall-now" {
+					send(map[string]any{"type": "shell_output", "sessionId": msg.SessionID, "message": "⚠️ Removendo Nexus Agent...\n"})
+					exe, _ := os.Executable()
+					exec.Command("sudo", exe, "-service", "stop").Run()
+					exec.Command("sudo", exe, "-service", "uninstall").Run()
+					os.Exit(0)
+				}
 				import_exec = exec.Command("sh", "-c", msg.Command)
 			}
 
@@ -490,12 +504,12 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 				case <-ctx.Done():
 				}
 			}
-			content, err := agentfs.ReadFile(msg.ImageName, msg.FilePath)
+			contentB64, err := agentfs.ReadFileB64(msg.ImageName, msg.FilePath)
 			if err != nil {
 				send(map[string]any{"type": "file_content", "requestId": msg.RequestID, "error": err.Error()})
 				return
 			}
-			send(map[string]any{"type": "file_content", "requestId": msg.RequestID, "content": content})
+			send(map[string]any{"type": "file_content", "requestId": msg.RequestID, "content": contentB64})
 		}()
 
 	case "write_file":
@@ -507,7 +521,7 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 				case <-ctx.Done():
 				}
 			}
-			if err := agentfs.WriteFile(msg.ImageName, msg.FilePath, msg.FileContent); err != nil {
+			if err := agentfs.WriteFileB64(msg.ImageName, msg.FilePath, msg.FileContent); err != nil {
 				send(map[string]any{"type": "file_write_result", "requestId": msg.RequestID, "success": false, "error": err.Error()})
 				return
 			}
@@ -548,6 +562,40 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 				return
 			}
 			send(map[string]any{"type": "file_copy_result", "requestId": msg.RequestID, "success": true})
+		}()
+
+	case "move_file":
+		go func() {
+			send := func(v any) {
+				b, _ := json.Marshal(v)
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+			if msg.DestPath == "" {
+				send(map[string]any{"type": "file_move_result", "requestId": msg.RequestID, "success": false, "error": "destPath required"})
+				return
+			}
+			if err := agentfs.MoveFile(msg.ImageName, msg.FilePath, msg.DestPath); err != nil {
+				send(map[string]any{"type": "file_move_result", "requestId": msg.RequestID, "success": false, "error": err.Error()})
+				return
+			}
+			send(map[string]any{"type": "file_move_result", "requestId": msg.RequestID, "success": true})
+		}()
+
+	case "terminate":
+		go func() {
+			log.Println("[ws] terminate command received, uninstalling service...")
+			exe, _ := os.Executable()
+			if runtime.GOOS == "windows" {
+				exec.Command(exe, "-service", "stop").Run()
+				exec.Command(exe, "-service", "uninstall").Run()
+			} else {
+				exec.Command("sudo", exe, "-service", "stop").Run()
+				exec.Command("sudo", exe, "-service", "uninstall").Run()
+			}
+			os.Exit(0)
 		}()
 
 	default:

@@ -4,6 +4,7 @@
 package fs
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -23,9 +24,17 @@ type FileEntry struct {
 }
 
 // safeAbs resolves relPath inside the project's base directory and returns the
-// absolute OS path.  Returns an error if the resolved path would escape the
-// project root (path-traversal protection).
+// absolute OS path. If imageName is "host", relPath is treated as an absolute
+// or CWD-relative path on the host system. Returns an error if the resolved
+// path would escape the project root (when not in "host" mode).
 func safeAbs(imageName, relPath string) (string, error) {
+	if imageName == "host" {
+		if filepath.IsAbs(relPath) {
+			return filepath.Clean(relPath), nil
+		}
+		return filepath.Abs(relPath)
+	}
+
 	// Sanitise imageName — strip any path separators so it stays a single dir.
 	clean := filepath.Base(filepath.Clean(imageName))
 	if clean == "." || clean == ".." || clean == "" {
@@ -61,7 +70,7 @@ func ListFiles(imageName, relPath string) ([]FileEntry, error) {
 
 	result := make([]FileEntry, 0, len(entries))
 	for _, e := range entries {
-		if e.Name() == ".git" {
+		if imageName != "host" && e.Name() == ".git" {
 			continue
 		}
 
@@ -103,7 +112,7 @@ func ReadFile(imageName, relPath string) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("path is a directory")
 	}
-	const maxBytes = 1 * 1024 * 1024 // 1 MB
+	const maxBytes = 10 * 1024 * 1024 // 10 MB
 	if info.Size() > maxBytes {
 		return "", fmt.Errorf("file too large (%d bytes; limit %d)", info.Size(), maxBytes)
 	}
@@ -212,4 +221,67 @@ func copyDir(src, dst string) error {
 		}
 	}
 	return nil
+}
+
+// MoveFile moves the file or directory at srcRel to dstRel (recursive).
+func MoveFile(imageName, srcRel, dstRel string) error {
+	src, err := safeAbs(imageName, srcRel)
+	if err != nil {
+		return err
+	}
+	dst, err := safeAbs(imageName, dstRel)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+
+	return os.Rename(src, dst)
+}
+
+// ReadFileB64 returns the base64-encoded content of the file at relPath.
+func ReadFileB64(imageName, relPath string) (string, error) {
+	abs, err := safeAbs(imageName, relPath)
+	if err != nil {
+		return "", err
+	}
+
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("readFile stat: %w", err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("path is a directory")
+	}
+	const maxBytes = 10 * 1024 * 1024 // 10 MB
+	if info.Size() > maxBytes {
+		return "", fmt.Errorf("file too large (%d bytes; limit %d)", info.Size(), maxBytes)
+	}
+
+	b, err := os.ReadFile(abs)
+	if err != nil {
+		return "", fmt.Errorf("readFile: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(b), nil
+}
+
+// WriteFileB64 writes base64-decoded content to the file at relPath.
+func WriteFileB64(imageName, relPath, contentB64 string) error {
+	abs, err := safeAbs(imageName, relPath)
+	if err != nil {
+		return err
+	}
+
+	data, err := base64.StdEncoding.DecodeString(contentB64)
+	if err != nil {
+		return fmt.Errorf("invalid base64: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(abs), 0755); err != nil {
+		return fmt.Errorf("writeFile mkdir: %w", err)
+	}
+
+	return os.WriteFile(abs, data, 0644)
 }

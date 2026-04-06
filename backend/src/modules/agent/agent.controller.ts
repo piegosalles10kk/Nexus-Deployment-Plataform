@@ -4,7 +4,17 @@ import jwt from 'jsonwebtoken';
 import prisma from '../../config/database';
 import { env } from '../../config/env';
 import { issueClientCert } from '../../services/ca.service';
-import { getAgentSocket, requestPortScan } from '../../services/agent-ws.service';
+import { 
+  getAgentSocket, 
+  requestPortScan, 
+  terminateAgent,
+  listProjectFiles,
+  readProjectFile,
+  writeProjectFile,
+  deleteProjectFile,
+  copyProjectFile,
+  moveProjectFile
+} from '../../services/agent-ws.service';
 import { getRedisClient } from '../../config/redis';
 
 // ── POST /api/v1/agent/enroll ─────────────────────────────────────────────────
@@ -185,5 +195,109 @@ export async function scanNodePorts(req: Request<{ id: string }>, res: Response,
   } catch (error) {
     // If agent is offline or timeout occurs
     res.status(502).json({ status: 'error', message: error instanceof Error ? error.message : 'Port scan failed' });
+  }
+}
+
+// ── POST /api/v1/agent/nodes/:id/terminate ──────────────────────────────────
+export async function terminateNodeAgent(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    terminateAgent(id);
+    await prisma.node.update({ where: { id }, data: { status: 'OFFLINE' } });
+    res.json({ status: 'success', message: 'Termination command sent.' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ── GET /api/v1/agent/nodes/:id/files ────────────────────────────────────────
+export async function listNodeFiles(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const filePath = (req.query.path as string) ?? '';
+    const entries = await listProjectFiles(id, 'host', filePath);
+    res.json({ status: 'success', data: { entries } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ── GET /api/v1/agent/nodes/:id/files/read ───────────────────────────────────
+export async function readNodeFile(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const filePath = (req.query.path as string) ?? '';
+    if (!filePath) {
+      res.status(400).json({ status: 'error', message: 'path query param required' });
+      return;
+    }
+    const content = await readProjectFile(id, 'host', filePath);
+    res.json({ status: 'success', data: { content } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ── POST /api/v1/agent/nodes/:id/files/write ──────────────────────────────────
+export async function writeNodeFile(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const { path: filePath, content } = req.body;
+    if (!filePath || content === undefined) {
+      res.status(400).json({ status: 'error', message: 'path and content are required' });
+      return;
+    }
+    await writeProjectFile(id, 'host', filePath, content);
+    res.json({ status: 'success', message: 'File saved' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ── DELETE /api/v1/agent/nodes/:id/files ──────────────────────────────────────
+export async function deleteNodeFile(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const filePath = (req.query.path as string) ?? '';
+    if (!filePath) {
+      res.status(400).json({ status: 'error', message: 'path query param required' });
+      return;
+    }
+    await deleteProjectFile(id, 'host', filePath);
+    res.json({ status: 'success', message: 'File deleted' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ── POST /api/v1/agent/nodes/:id/files/copy ───────────────────────────────────
+export async function copyNodeFile(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const { path: filePath, dest: destPath } = req.body;
+    if (!filePath || !destPath) {
+      res.status(400).json({ status: 'error', message: 'path and dest are required' });
+      return;
+    }
+    await copyProjectFile(id, 'host', filePath, destPath);
+    res.json({ status: 'success', message: 'File copied' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ── POST /api/v1/agent/nodes/:id/files/move ───────────────────────────────────
+export async function moveNodeFile(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const { path: filePath, dest: destPath } = req.body;
+    if (!filePath || !destPath) {
+      res.status(400).json({ status: 'error', message: 'path and dest are required' });
+      return;
+    }
+    await moveProjectFile(id, 'host', filePath, destPath);
+    res.json({ status: 'success', message: 'File moved' });
+  } catch (error) {
+    next(error);
   }
 }

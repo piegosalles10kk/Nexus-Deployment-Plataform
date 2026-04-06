@@ -177,6 +177,24 @@ export function deleteProjectFile(nodeId: string, imageName: string, filePath: s
   );
 }
 
+export function moveProjectFile(nodeId: string, imageName: string, filePath: string, destPath: string): Promise<void> {
+  return sendAgentRequest(
+    nodeId,
+    { type: 'command', action: 'move_file', imageName, filePath, destPath },
+  );
+}
+
+/**
+ * Sends a terminate command to an agent, which will uninstall the service and exit.
+ */
+export function terminateAgent(nodeId: string): void {
+  const ws = agentSockets.get(nodeId);
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'command', action: 'terminate' }));
+}
+
 /**
  * Sends an HTTP request through the named agent's WebSocket tunnel and
  * returns the proxied response.  Rejects if the agent is offline or the
@@ -410,7 +428,8 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
         case 'file_content':
         case 'file_write_result':
         case 'file_delete_result':
-        case 'file_copy_result': {
+        case 'file_copy_result':
+        case 'file_move_result': {
           const pending = pendingAgentResponses.get(msg.requestId);
           if (pending) {
             pendingAgentResponses.delete(msg.requestId);

@@ -87,7 +87,20 @@ func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) Deplo
 		}
 	}
 
-	// 2. Rotate tags: current → previous (before overwriting the build)
+	// 2. Generate .env file from provided environment variables (overwrites existing)
+	if len(req.EnvVars) > 0 {
+		var sb strings.Builder
+		for k, v := range req.EnvVars {
+			sb.WriteString(fmt.Sprintf("%s=%s\n", k, v))
+		}
+		envPath := filepath.Join(repoDir, ".env")
+		onLog("▶ gerando arquivo .env")
+		if err := os.WriteFile(envPath, []byte(sb.String()), 0600); err != nil {
+			onLog("⚠️ Aviso: Falha ao gravar .env: " + err.Error())
+		}
+	}
+
+	// 3. Rotate tags: current → previous (before overwriting the build)
 	hasPrevious := false
 	if err := runCmd(ctx, nil, "", GetExecutable("docker"), "inspect", "--type=image", req.ImageName+":current"); err == nil {
 		if tagErr := runCmd(ctx, nil, "", GetExecutable("docker"), "tag", req.ImageName+":current", req.ImageName+":previous"); tagErr == nil {
@@ -96,30 +109,30 @@ func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) Deplo
 		}
 	}
 
-	// 3. Clean build cache to ensure a fresh build
+	// 4. Clean build cache to ensure a fresh build
 	onLog("▶ docker builder prune -f")
 	_ = runCmd(ctx, onLog, "", GetExecutable("docker"), "builder", "prune", "-f")
 
-	// 4. Docker build with --no-cache (overwrites current image tag)
+	// 5. Docker build with --no-cache (overwrites current image tag)
 	onLog("▶ docker build --no-cache -t " + req.ImageName)
 	if err := runCmd(ctx, onLog, repoDir,
 		GetExecutable("docker"), "build", "--no-cache", "-t", req.ImageName, "."); err != nil {
 		return DeployResult{Err: fmt.Errorf("docker build: %w", err)}
 	}
 
-	// 5. Stop and remove old container (best-effort)
+	// 6. Stop and remove old container (best-effort)
 	onLog("▶ replacing container " + req.ImageName)
 	_ = runCmd(ctx, nil, "", GetExecutable("docker"), "stop", req.ImageName)
 	_ = runCmd(ctx, nil, "", GetExecutable("docker"), "rm", req.ImageName)
 
-	// 6. Build docker run args
+	// 7. Build docker run args
 	runArgs := buildRunArgs(req, req.ImageName)
 
 	onLog("▶ docker run " + req.ImageName)
 	if err := runCmd(ctx, onLog, "", GetExecutable("docker"), runArgs...); err != nil {
 		onLog("Falha ao iniciar container: " + err.Error())
 
-		// 7. Attempt rollback if a previous image snapshot exists
+		// 8. Attempt rollback if a previous image snapshot exists
 		if hasPrevious {
 			onLog("▶ iniciando rollback para " + req.ImageName + ":previous…")
 			_ = runCmd(ctx, nil, "", GetExecutable("docker"), "stop", req.ImageName)
@@ -140,7 +153,7 @@ func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) Deplo
 		return DeployResult{Err: fmt.Errorf("docker run: %w", err)}
 	}
 
-	// 8. Health check — grace period then verify
+	// 9. Health check — grace period then verify
 	delay := req.HealthCheckDelay
 	if delay <= 0 {
 		delay = 15
@@ -179,7 +192,7 @@ func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) Deplo
 	}
 	onLog("✓ health check passou")
 
-	// 9. Promote new build as the confirmed-healthy current snapshot
+	// 10. Promote new build as the confirmed-healthy current snapshot
 	_ = runCmd(ctx, nil, "", GetExecutable("docker"), "tag", req.ImageName, req.ImageName+":current")
 
 	onLog("✓ container " + req.ImageName + " started")

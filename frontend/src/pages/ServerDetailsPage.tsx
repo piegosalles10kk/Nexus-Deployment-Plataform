@@ -2,8 +2,10 @@ import { useState, useEffect, useRef, FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Server, ArrowLeft, Terminal, Cpu, Activity,
-  Globe, Clock, TerminalSquare, Layers, CheckCircle2, AlertCircle, Play
+  Globe, Clock, TerminalSquare, Layers, CheckCircle2, AlertCircle, Play,
+  FolderTree, ShieldAlert, PowerOff
 } from 'lucide-react';
+import FileManager from '../components/FileManager';
 import api from '../services/api';
 import { getSocket } from '../services/socket';
 import { XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -14,7 +16,7 @@ export default function ServerDetailsPage() {
   
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'console' | 'telemetry'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'console' | 'telemetry' | 'ftp'>('overview');
   const [telemetryHistory, setTelemetryHistory] = useState<any[]>([]);
 
   // Terminal state
@@ -109,6 +111,18 @@ export default function ServerDetailsPage() {
     setCommand('');
   };
 
+  const handleTerminateAgent = async () => {
+    if (!confirm('⚠️ ATENÇÃO: Isso irá desinstalar o Nexus Agent permanentemente desta máquina. A conexão será perdida e você precisará reinstalar manualmente. Deseja continuar?')) return;
+    
+    try {
+      await api.post(`/v1/agent/nodes/${id}/terminate`);
+      alert('Comando de terminação enviado.');
+      navigate('/cloud');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Falha ao encerrar agente.');
+    }
+  };
+
   if (loading) {
     return <div className="flex h-64 items-center justify-center animate-pulse text-text-muted">Carregando detalhes do servidor...</div>;
   }
@@ -168,6 +182,14 @@ export default function ServerDetailsPage() {
           }`}
         >
           <Activity className="w-4 h-4" /> RMM / Telemetria
+        </button>
+        <button
+          onClick={() => setActiveTab('ftp')}
+          className={`pb-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'ftp' ? 'border-accent text-accent-light' : 'border-transparent text-text-muted hover:text-text-primary'
+          }`}
+        >
+          <FolderTree className="w-4 h-4" /> Gerenciador FTP
         </button>
       </div>
 
@@ -232,6 +254,32 @@ export default function ServerDetailsPage() {
                  )}
                </div>
             </div>
+
+            {/* Danger Zone */}
+            <div className="bg-danger/5 border border-danger/20 rounded-xl overflow-hidden mt-6 shadow-[0_0_20px_rgba(239,68,68,0.05)]">
+               <div className="px-6 py-4 border-b border-danger/10 bg-danger/10 flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-danger" />
+                  <h3 className="font-bold text-danger">Operações Críticas (Danger Zone)</h3>
+               </div>
+               <div className="p-6 flex items-center justify-between">
+                  <div>
+                     <p className="text-sm font-bold text-text-primary">Encerrar e Desinstalar Agente</p>
+                     <p className="text-xs text-text-secondary mt-1">Remove permanentemente o Nexus Agent deste servidor. Ação irreversível pelo painel.</p>
+                  </div>
+                  <button 
+                    onClick={handleTerminateAgent}
+                    className="px-6 py-2.5 rounded-xl bg-danger hover:bg-danger-hover text-white text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-danger/20"
+                  >
+                    <PowerOff className="w-4 h-4" /> Desinstalar Nexus Agent
+                  </button>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'ftp' && (
+          <div className="animate-fade-in">
+             <FileManager nodeId={data.node.id} />
           </div>
         )}
 
