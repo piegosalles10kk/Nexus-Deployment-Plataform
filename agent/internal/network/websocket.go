@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/10kk/agent/internal/docker"
+	agentfs "github.com/10kk/agent/internal/fs"
 	"github.com/10kk/agent/internal/metrics"
 	"github.com/10kk/agent/internal/telemetry"
 	"github.com/10kk/agent/internal/updater"
@@ -60,6 +61,9 @@ type inboundMsg struct {
 	// port-scan fields
 	StartPort int `json:"startPort,omitempty"`
 	EndPort   int `json:"endPort,omitempty"`
+	// file-manager fields
+	FilePath    string `json:"filePath,omitempty"`
+	FileContent string `json:"fileContent,omitempty"`
 }
 
 // RunConnectionLoop dials the master and re-dials on any disconnect.
@@ -417,6 +421,96 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 			}
 
 			send(map[string]string{"type": "deploy_done"})
+		}()
+
+	case "stop":
+		go func() {
+			send := func(v any) {
+				b, _ := json.Marshal(v)
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+			if msg.ImageName == "" {
+				send(map[string]any{"type": "container_action_result", "requestId": msg.RequestID, "success": false, "error": "imageName required"})
+				return
+			}
+			if err := exec.CommandContext(ctx, docker.GetExecutable("docker"), "stop", msg.ImageName).Run(); err != nil {
+				send(map[string]any{"type": "container_action_result", "requestId": msg.RequestID, "success": false, "error": err.Error()})
+				return
+			}
+			send(map[string]any{"type": "container_action_result", "requestId": msg.RequestID, "success": true})
+		}()
+
+	case "restart":
+		go func() {
+			send := func(v any) {
+				b, _ := json.Marshal(v)
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+			if msg.ImageName == "" {
+				send(map[string]any{"type": "container_action_result", "requestId": msg.RequestID, "success": false, "error": "imageName required"})
+				return
+			}
+			if err := exec.CommandContext(ctx, docker.GetExecutable("docker"), "restart", msg.ImageName).Run(); err != nil {
+				send(map[string]any{"type": "container_action_result", "requestId": msg.RequestID, "success": false, "error": err.Error()})
+				return
+			}
+			send(map[string]any{"type": "container_action_result", "requestId": msg.RequestID, "success": true})
+		}()
+
+	case "list_files":
+		go func() {
+			send := func(v any) {
+				b, _ := json.Marshal(v)
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+			entries, err := agentfs.ListFiles(msg.ImageName, msg.FilePath)
+			if err != nil {
+				send(map[string]any{"type": "file_list", "requestId": msg.RequestID, "error": err.Error()})
+				return
+			}
+			send(map[string]any{"type": "file_list", "requestId": msg.RequestID, "entries": entries})
+		}()
+
+	case "read_file":
+		go func() {
+			send := func(v any) {
+				b, _ := json.Marshal(v)
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+			content, err := agentfs.ReadFile(msg.ImageName, msg.FilePath)
+			if err != nil {
+				send(map[string]any{"type": "file_content", "requestId": msg.RequestID, "error": err.Error()})
+				return
+			}
+			send(map[string]any{"type": "file_content", "requestId": msg.RequestID, "content": content})
+		}()
+
+	case "write_file":
+		go func() {
+			send := func(v any) {
+				b, _ := json.Marshal(v)
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+			if err := agentfs.WriteFile(msg.ImageName, msg.FilePath, msg.FileContent); err != nil {
+				send(map[string]any{"type": "file_write_result", "requestId": msg.RequestID, "success": false, "error": err.Error()})
+				return
+			}
+			send(map[string]any{"type": "file_write_result", "requestId": msg.RequestID, "success": true})
 		}()
 
 	default:

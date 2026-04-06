@@ -37,6 +37,9 @@ const pendingProxyRequests = new Map<string, (response: ProxyResponse) => void>(
 /** Pending agent port scan requests: requestId → resolve callback */
 const pendingScanRequests = new Map<string, (ports: number[]) => void>();
 
+/** Generic pending agent responses (stop/restart/files): requestId → resolve/reject */
+const pendingAgentResponses = new Map<string, { resolve: (msg: any) => void; reject: (err: Error) => void }>();
+
 /** Maximum body size for a single tunnel request/response (5 MB). */
 const TUNNEL_MAX_BODY_BYTES = 5 * 1024 * 1024;
 
@@ -78,6 +81,86 @@ export function sendRemoveCommand(nodeId: string, imageName: string): void {
     return;
   }
   ws.send(JSON.stringify({ type: 'command', action: 'remove', imageName }));
+}
+
+// ── Generic agent request helper ─────────────────────────────────────────────
+
+/**
+ * Sends a command to an agent and awaits the response message identified by requestId.
+ * Rejects if the agent is offline or the request times out.
+ */
+function sendAgentRequest<T = any>(
+  nodeId: string,
+  payload: object,
+  timeoutMs = 30_000,
+): Promise<T> {
+  const ws = agentSockets.get(nodeId);
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return Promise.reject(new Error(`Agent ${nodeId} is not connected`));
+  }
+
+  const requestId = randomUUID();
+
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingAgentResponses.delete(requestId);
+      reject(new Error(`Agent request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    pendingAgentResponses.set(requestId, {
+      resolve: (msg: any) => {
+        clearTimeout(timer);
+        if (msg.error) reject(new Error(msg.error));
+        else resolve(msg as T);
+      },
+      reject: (err: Error) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    });
+
+    ws.send(JSON.stringify({ ...payload, requestId }));
+  });
+}
+
+// ── Container lifecycle commands ──────────────────────────────────────────────
+
+export function stopContainer(nodeId: string, imageName: string): Promise<void> {
+  return sendAgentRequest(nodeId, { type: 'command', action: 'stop', imageName });
+}
+
+export function restartContainer(nodeId: string, imageName: string): Promise<void> {
+  return sendAgentRequest(nodeId, { type: 'command', action: 'restart', imageName });
+}
+
+// ── File manager commands ─────────────────────────────────────────────────────
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number;
+}
+
+export function listProjectFiles(nodeId: string, imageName: string, filePath = ''): Promise<FileEntry[]> {
+  return sendAgentRequest<{ entries: FileEntry[] }>(
+    nodeId,
+    { type: 'command', action: 'list_files', imageName, filePath },
+  ).then((msg) => msg.entries ?? []);
+}
+
+export function readProjectFile(nodeId: string, imageName: string, filePath: string): Promise<string> {
+  return sendAgentRequest<{ content: string }>(
+    nodeId,
+    { type: 'command', action: 'read_file', imageName, filePath },
+  ).then((msg) => msg.content ?? '');
+}
+
+export function writeProjectFile(nodeId: string, imageName: string, filePath: string, fileContent: string): Promise<void> {
+  return sendAgentRequest(
+    nodeId,
+    { type: 'command', action: 'write_file', imageName, filePath, fileContent },
+  );
 }
 
 /**
@@ -304,6 +387,18 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
           if (resolver) {
             pendingScanRequests.delete(msg.requestId);
             resolver(msg.ports ?? []);
+          }
+          break;
+        }
+
+        case 'container_action_result':
+        case 'file_list':
+        case 'file_content':
+        case 'file_write_result': {
+          const pending = pendingAgentResponses.get(msg.requestId);
+          if (pending) {
+            pendingAgentResponses.delete(msg.requestId);
+            pending.resolve(msg);
           }
           break;
         }

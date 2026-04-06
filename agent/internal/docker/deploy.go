@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -32,8 +33,12 @@ type DeployResult struct {
 	Err error
 }
 
-// RunDeploy clones the repo, builds a Docker image, and starts the container.
-// If the new container fails to start and a previous rollback image exists,
+// projectsBaseDir is the persistent directory where repos are cloned.
+const projectsBaseDir = "./projects"
+
+// RunDeploy updates (or clones) the repo, builds a Docker image, and starts
+// the container. Uses a persistent clone directory to avoid full re-clones on
+// every deploy. If the new container fails and a previous rollback image exists,
 // it is automatically restored and DeployResult.RolledBack is set to true.
 // Progress lines are streamed via onLog.
 func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) DeployResult {
@@ -46,57 +51,82 @@ func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) Deplo
 		branch = "main"
 	}
 
-	// 1. Clone into a temporary directory
-	tmpDir, err := os.MkdirTemp("", "10kk-deploy-")
-	if err != nil {
-		return DeployResult{Err: fmt.Errorf("mktemp: %w", err)}
+	// 1. Prepare persistent project directory
+	if err := os.MkdirAll(projectsBaseDir, 0755); err != nil {
+		return DeployResult{Err: fmt.Errorf("mkdir projects: %w", err)}
 	}
-	defer os.RemoveAll(tmpDir)
+	repoDir := filepath.Join(projectsBaseDir, req.ImageName)
 
-	onLog("▶ git clone " + req.Repo + " (branch: " + branch + ")")
-	if err := runCmd(ctx, onLog, tmpDir,
-		getExecutable("git"), "clone", "--depth", "1", "--branch", branch, req.Repo, "."); err != nil {
-		return DeployResult{Err: fmt.Errorf("git clone: %w", err)}
+	gitDir := filepath.Join(repoDir, ".git")
+	if _, err := os.Stat(gitDir); err == nil {
+		// Already cloned — fetch latest commits
+		onLog("▶ git fetch origin " + branch)
+		if fetchErr := runCmd(ctx, onLog, repoDir,
+			GetExecutable("git"), "fetch", "--depth", "1", "origin", branch); fetchErr != nil {
+			// Fetch failed (e.g. remote changed) — wipe and re-clone
+			onLog("git fetch falhou, re-clonando: " + fetchErr.Error())
+			_ = os.RemoveAll(repoDir)
+		} else {
+			onLog("▶ git reset --hard FETCH_HEAD")
+			if err := runCmd(ctx, onLog, repoDir,
+				GetExecutable("git"), "reset", "--hard", "FETCH_HEAD"); err != nil {
+				return DeployResult{Err: fmt.Errorf("git reset: %w", err)}
+			}
+		}
+	}
+
+	// Re-check: if directory doesn't exist (first time or wiped above), clone
+	if _, err := os.Stat(gitDir); err != nil {
+		if mkErr := os.MkdirAll(repoDir, 0755); mkErr != nil {
+			return DeployResult{Err: fmt.Errorf("mkdir repoDir: %w", mkErr)}
+		}
+		onLog("▶ git clone " + req.Repo + " (branch: " + branch + ")")
+		if err := runCmd(ctx, onLog, repoDir,
+			GetExecutable("git"), "clone", "--depth", "1", "--branch", branch, req.Repo, "."); err != nil {
+			return DeployResult{Err: fmt.Errorf("git clone: %w", err)}
+		}
 	}
 
 	// 2. Rotate tags: current → previous (before overwriting the build)
-	//    image:current = last confirmed-healthy build
-	//    image:previous = the rollback target
 	hasPrevious := false
-	if err := runCmd(ctx, nil, "", getExecutable("docker"), "inspect", "--type=image", req.ImageName+":current"); err == nil {
-		if tagErr := runCmd(ctx, nil, "", getExecutable("docker"), "tag", req.ImageName+":current", req.ImageName+":previous"); tagErr == nil {
+	if err := runCmd(ctx, nil, "", GetExecutable("docker"), "inspect", "--type=image", req.ImageName+":current"); err == nil {
+		if tagErr := runCmd(ctx, nil, "", GetExecutable("docker"), "tag", req.ImageName+":current", req.ImageName+":previous"); tagErr == nil {
 			onLog("Snapshot de rollback: " + req.ImageName + ":previous ← current")
 			hasPrevious = true
 		}
 	}
 
-	// 3. Docker build (overwrites the current image tag)
-	onLog("▶ docker build -t " + req.ImageName)
-	if err := runCmd(ctx, onLog, tmpDir,
-		getExecutable("docker"), "build", "-t", req.ImageName, "."); err != nil {
+	// 3. Clean build cache to ensure a fresh build
+	onLog("▶ docker builder prune -f")
+	_ = runCmd(ctx, onLog, "", GetExecutable("docker"), "builder", "prune", "-f")
+
+	// 4. Docker build with --no-cache (overwrites current image tag)
+	onLog("▶ docker build --no-cache -t " + req.ImageName)
+	if err := runCmd(ctx, onLog, repoDir,
+		GetExecutable("docker"), "build", "--no-cache", "-t", req.ImageName, "."); err != nil {
 		return DeployResult{Err: fmt.Errorf("docker build: %w", err)}
 	}
 
-	// 4. Stop and remove old container (best-effort)
+	// 5. Stop and remove old container (best-effort)
 	onLog("▶ replacing container " + req.ImageName)
-	_ = runCmd(ctx, nil, "", getExecutable("docker"), "stop", req.ImageName)
-	_ = runCmd(ctx, nil, "", getExecutable("docker"), "rm", req.ImageName)
+	_ = runCmd(ctx, nil, "", GetExecutable("docker"), "stop", req.ImageName)
+	_ = runCmd(ctx, nil, "", GetExecutable("docker"), "rm", req.ImageName)
 
-	// 5. Build docker run args
+	// 6. Build docker run args
 	runArgs := buildRunArgs(req, req.ImageName)
 
 	onLog("▶ docker run " + req.ImageName)
-	if err := runCmd(ctx, onLog, "", "docker", runArgs...); err != nil {
+	if err := runCmd(ctx, onLog, "", GetExecutable("docker"), runArgs...); err != nil {
 		onLog("Falha ao iniciar container: " + err.Error())
 
-		// 6. Attempt rollback if a previous image snapshot exists
+		// 7. Attempt rollback if a previous image snapshot exists
 		if hasPrevious {
 			onLog("▶ iniciando rollback para " + req.ImageName + ":previous…")
-			_ = runCmd(ctx, nil, "", getExecutable("docker"), "stop", req.ImageName)
-			_ = runCmd(ctx, nil, "", getExecutable("docker"), "rm", req.ImageName)
+			_ = runCmd(ctx, nil, "", GetExecutable("docker"), "stop", req.ImageName)
+			_ = runCmd(ctx, nil, "", GetExecutable("docker"), "rm", req.ImageName)
 
 			rbArgs := buildRunArgs(req, req.ImageName+":previous")
-			if rbErr := runCmd(ctx, onLog, "", getExecutable("docker"), rbArgs...); rbErr == nil {
+			if rbErr := runCmd(ctx, onLog, "", GetExecutable("docker"), rbArgs...); rbErr == nil {
 				onLog("✓ rollback concluído — versão anterior restaurada")
 				return DeployResult{
 					RolledBack: true,
@@ -110,7 +140,7 @@ func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) Deplo
 		return DeployResult{Err: fmt.Errorf("docker run: %w", err)}
 	}
 
-	// 7. Health check — grace period then verify
+	// 8. Health check — grace period then verify
 	delay := req.HealthCheckDelay
 	if delay <= 0 {
 		delay = 15
@@ -134,10 +164,10 @@ func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) Deplo
 		onLog(reason)
 		if hasPrevious {
 			onLog("▶ iniciando rollback para " + req.ImageName + ":previous…")
-			_ = runCmd(ctx, nil, "", getExecutable("docker"), "stop", req.ImageName)
-			_ = runCmd(ctx, nil, "", getExecutable("docker"), "rm", req.ImageName)
+			_ = runCmd(ctx, nil, "", GetExecutable("docker"), "stop", req.ImageName)
+			_ = runCmd(ctx, nil, "", GetExecutable("docker"), "rm", req.ImageName)
 			rbArgs := buildRunArgs(req, req.ImageName+":previous")
-			if rbErr := runCmd(ctx, onLog, "", "docker", rbArgs...); rbErr == nil {
+			if rbErr := runCmd(ctx, onLog, "", GetExecutable("docker"), rbArgs...); rbErr == nil {
 				onLog("✓ rollback concluído — versão anterior restaurada")
 				return DeployResult{
 					RolledBack: true,
@@ -149,8 +179,8 @@ func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) Deplo
 	}
 	onLog("✓ health check passou")
 
-	// 8. Promote new build as the confirmed-healthy current snapshot
-	_ = runCmd(ctx, nil, "", getExecutable("docker"), "tag", req.ImageName, req.ImageName+":current")
+	// 9. Promote new build as the confirmed-healthy current snapshot
+	_ = runCmd(ctx, nil, "", GetExecutable("docker"), "tag", req.ImageName, req.ImageName+":current")
 
 	onLog("✓ container " + req.ImageName + " started")
 	return DeployResult{}
@@ -187,7 +217,6 @@ func runCmd(ctx context.Context, onLog func(string), dir string, name string, ar
 	}
 	err := cmd.Run()
 	if err != nil {
-		// Log environment context for debugging on failure
 		log.Printf("[docker] runCmd(%s) failed: %v", name, err)
 		log.Printf("[docker] PATH=%s", os.Getenv("PATH"))
 		if onLog != nil {
@@ -197,8 +226,8 @@ func runCmd(ctx context.Context, onLog func(string), dir string, name string, ar
 	return err
 }
 
-// getExecutable returns the command to run, allowing environment overrides.
-func getExecutable(name string) string {
+// GetExecutable returns the command to run, allowing environment overrides.
+func GetExecutable(name string) string {
 	switch name {
 	case "git":
 		if p := os.Getenv("GIT_PATH"); p != "" {
@@ -279,7 +308,7 @@ func httpHealthCheck(ctx context.Context, url string, onLog func(string)) error 
 // containerRunningCheck inspects the container and returns an error if it is not running.
 func containerRunningCheck(ctx context.Context, name string) error {
 	out, err := exec.CommandContext(ctx,
-		getExecutable("docker"), "inspect", "--format", "{{.State.Running}}", name).Output()
+		GetExecutable("docker"), "inspect", "--format", "{{.State.Running}}", name).Output()
 	if err != nil {
 		return fmt.Errorf("docker inspect: %w", err)
 	}

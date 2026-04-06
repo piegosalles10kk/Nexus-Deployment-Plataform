@@ -9,9 +9,10 @@ import {
   Rocket, Loader2, CheckCircle2, XCircle, PauseCircle, GitCommit,
   FlaskConical, Clock, Trash2, Plus, Eye, EyeOff, Save, AlertCircle, X,
   ChevronUp, ChevronDown, Info, Layers, Cpu, HardDrive,
-  Zap, RefreshCw,
+  Zap, RefreshCw, Square, RotateCcw, FolderOpen,
 } from 'lucide-react';
 import MetricsChart, { MetricPoint } from '../components/MetricsChart';
+import FileManager from '../components/FileManager';
 
 interface WorkflowStep {
   id?: string;
@@ -112,7 +113,7 @@ interface Secret {
   projectId: string;
 }
 
-const tabs = ['Visão Geral', 'Instâncias', 'Histórico', 'Terminal', 'Configurações'] as const;
+const tabs = ['Visão Geral', 'Instâncias', 'Histórico', 'Terminal', 'Arquivos', 'Configurações'] as const;
 type Tab = typeof tabs[number];
 
 const inputClass = 'w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 transition-colors';
@@ -129,6 +130,7 @@ export default function ProjectPage() {
   const [loading, setLoading] = useState(true);
   const [deploying, setDeploying] = useState(false);
   const [currentDeployId, setCurrentDeployId] = useState<string | null>(null);
+  const [containerAction, setContainerAction] = useState<'stop' | 'restart' | null>(null);
   const [selectedDeployId, setSelectedDeployId] = useState<string | null>(null);
   const [containerMetrics, setContainerMetrics] = useState<Record<string, ContainerMetrics>>({});
   const [metricsHistory, setMetricsHistory] = useState<Record<string, MetricPoint[]>>({});
@@ -232,6 +234,29 @@ export default function ProjectPage() {
     }
   };
 
+  const stopProject = async () => {
+    if (!confirm('Parar o container do projeto?')) return;
+    setContainerAction('stop');
+    try {
+      await api.post(`/projects/${id}/stop`);
+    } catch (err: any) {
+      console.error('Falha ao parar container:', err);
+    } finally {
+      setContainerAction(null);
+    }
+  };
+
+  const restartProject = async () => {
+    setContainerAction('restart');
+    try {
+      await api.post(`/projects/${id}/restart`);
+    } catch (err: any) {
+      console.error('Falha ao reiniciar container:', err);
+    } finally {
+      setContainerAction(null);
+    }
+  };
+
   if (loading || !project) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -282,6 +307,28 @@ export default function ProjectPage() {
                 Cancelar
               </button>
             )}
+            {(project.environmentType === 'NODE' || project.environmentType === 'CLOUD') && (
+              <>
+                <button
+                  onClick={restartProject}
+                  disabled={!!containerAction || deploying}
+                  title="Reiniciar container"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-bg-card-hover font-semibold text-sm disabled:opacity-50 transition-colors"
+                >
+                  {containerAction === 'restart' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                  Reiniciar
+                </button>
+                <button
+                  onClick={stopProject}
+                  disabled={!!containerAction || deploying}
+                  title="Parar container"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-danger/40 text-danger hover:bg-danger/8 font-semibold text-sm disabled:opacity-50 transition-colors"
+                >
+                  {containerAction === 'stop' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}
+                  Parar
+                </button>
+              </>
+            )}
             <button
               onClick={triggerDeploy}
               disabled={deploying}
@@ -299,11 +346,13 @@ export default function ProjectPage() {
         {tabs.map((tab) => {
           if (tab === 'Terminal' && !hasRole('ADM', 'TECNICO')) return null;
           if (tab === 'Configurações' && !hasRole('ADM', 'TECNICO')) return null;
+          if (tab === 'Arquivos' && project.environmentType === 'LOCAL') return null;
           const icons = {
             'Visão Geral': Activity,
             'Instâncias': Layers,
             'Histórico': History,
             'Terminal': TerminalIcon,
+            'Arquivos': FolderOpen,
             'Configurações': Settings,
           };
           const Icon = icons[tab];
@@ -336,6 +385,12 @@ export default function ProjectPage() {
         )}
         {activeTab === 'Histórico' && <HistoryTab deploys={deploys} onSelect={(id) => setSelectedDeployId(id)} />}
         {activeTab === 'Terminal' && <LogsTab logs={logs} deploying={deploying} logsEndRef={logsEndRef} />}
+        {activeTab === 'Arquivos' && (
+          <FileManager
+            projectId={id!}
+            canEdit={hasRole('ADM', 'TECNICO')}
+          />
+        )}
         {activeTab === 'Configurações' && <SettingsTab project={project} secrets={secrets} onUpdate={loadProject} onDelete={deleteProject} canDelete={hasRole('ADM')} />}
       </div>
 

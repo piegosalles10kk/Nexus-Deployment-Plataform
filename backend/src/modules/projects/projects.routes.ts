@@ -20,4 +20,13 @@ router.put('/:id/workflow', authorize('ADM', 'TECNICO'), projectsController.save
 // Only ADM can delete
 router.delete('/:id', authorize('ADM'), projectsController.deleteProject);
 
+// Container lifecycle (NODE/CLOUD projects)
+router.post('/:id/stop',    authorize('ADM', 'TECNICO'), projectsController.stopProject);
+router.post('/:id/restart', authorize('ADM', 'TECNICO'), projectsController.restartProject);
+
+// File manager
+router.get('/:id/files',         authenticate, projectsController.listFiles);
+router.get('/:id/files/content', authenticate, projectsController.getFileContent);
+router.put('/:id/files/content', authorize('ADM', 'TECNICO'), projectsController.updateFile);
+
 export default router;

@@ -1,6 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import * as projectsService from './projects.service';
 import { createProjectSchema, updateProjectSchema, saveWorkflowSchema } from './projects.schema';
+import prisma from '../../config/database';
+import {
+  stopContainer,
+  restartContainer,
+  listProjectFiles,
+  readProjectFile,
+  writeProjectFile,
+} from '../../services/agent-ws.service';
 
 export async function listProjects(req: Request, res: Response, next: NextFunction) {
   try {
@@ -65,6 +73,79 @@ export async function getStats(req: Request, res: Response, next: NextFunction) 
   try {
     const stats = await projectsService.getProjectStats();
     res.json({ status: 'success', data: stats });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ── Container lifecycle ───────────────────────────────────────────────────────
+
+async function resolveNodeAndImage(projectId: string) {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) throw Object.assign(new Error('Projeto não encontrado'), { statusCode: 404 });
+  if (!project.nodeId) throw Object.assign(new Error('Projeto não possui nodeId configurado'), { statusCode: 400 });
+  const imageName = project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  return { project, imageName };
+}
+
+export async function stopProject(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    await stopContainer(project.nodeId!, imageName);
+    res.json({ status: 'success', message: 'Container parado' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function restartProject(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    await restartContainer(project.nodeId!, imageName);
+    res.json({ status: 'success', message: 'Container reiniciado' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ── File manager ──────────────────────────────────────────────────────────────
+
+export async function listFiles(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    const filePath = (req.query.path as string) ?? '';
+    const entries = await listProjectFiles(project.nodeId!, imageName, filePath);
+    res.json({ status: 'success', data: { entries } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getFileContent(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    const filePath = (req.query.path as string) ?? '';
+    if (!filePath) {
+      res.status(400).json({ status: 'error', message: 'path query param required' });
+      return;
+    }
+    const content = await readProjectFile(project.nodeId!, imageName, filePath);
+    res.json({ status: 'success', data: { content } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateFile(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    const { path: filePath, content } = req.body;
+    if (!filePath || content === undefined) {
+      res.status(400).json({ status: 'error', message: 'path and content are required' });
+      return;
+    }
+    await writeProjectFile(project.nodeId!, imageName, filePath, content);
+    res.json({ status: 'success', message: 'Arquivo salvo' });
   } catch (error) {
     next(error);
   }
