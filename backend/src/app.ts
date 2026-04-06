@@ -117,7 +117,14 @@ export function createApp() {
   );
 
   // Global middlewares
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "connect-src": ["'self'", "wss:", "https:", "ws:"],
+      },
+    },
+  }));
   app.use(cors({
     origin: env.FRONTEND_URL,
     credentials: true,

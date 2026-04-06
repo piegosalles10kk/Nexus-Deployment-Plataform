@@ -111,10 +111,10 @@ func updateWindows(exePath string, body io.Reader) error {
 	log.Println("[updater] binary replaced; restarting Windows service")
 
 	// Step 3: restart the Windows service via sc.exe
-	if err := exec.Command("sc", "stop", "10kk-agent").Run(); err != nil {
+	if err := exec.Command("sc", "stop", "nexus-agent").Run(); err != nil {
 		log.Printf("[updater] sc stop warning: %v", err)
 	}
-	if err := exec.Command("sc", "start", "10kk-agent").Run(); err != nil {
+	if err := exec.Command("sc", "start", "nexus-agent").Run(); err != nil {
 		return fmt.Errorf("sc start failed: %w", err)
 	}
 

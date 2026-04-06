@@ -285,8 +285,8 @@ Invoke-WebRequest -Uri "http://seu-host:4500/install.ps1" -OutFile install.ps1
 .\install.ps1 -Token "SEU_TOKEN" -Master "wss://seu-host/ws/agent"
 ```
 
-O binário é salvo em `/usr/local/bin/10kk-agent` (Linux/macOS) ou `C:\Program Files\10KK-Agent\` (Windows).  
-Os certificados mTLS ficam em `/etc/10kk/certs/` (Linux/macOS) ou `C:\Program Files\10KK-Agent\certs\` (Windows).
+O binário é salvo em `/usr/local/bin/nexus-agent` (Linux/macOS) ou `C:\NexusAgent\` (Windows).  
+Os certificados mTLS ficam em `/etc/10kk/certs/` (Linux/macOS) ou `C:\NexusAgent\certs\` (Windows).
 
 ---
 
@@ -295,9 +295,9 @@ Os certificados mTLS ficam em `/etc/10kk/certs/` (Linux/macOS) ou `C:\Program Fi
 **1. Baixar o binário:**
 ```bash
 # Substitua <os> por linux ou darwin, e <arch> por amd64 ou arm64
-curl -fsSL http://seu-host:4500/downloads/10kk-agent-<os>-<arch> \
-  -o /usr/local/bin/10kk-agent
-chmod +x /usr/local/bin/10kk-agent
+curl -fsSL http://seu-host:4500/downloads/nexus-agent-<os>-<arch> \
+  -o /usr/local/bin/nexus-agent
+chmod +x /usr/local/bin/nexus-agent
 ```
 
 **2. Obter certificados mTLS:**
@@ -319,12 +319,12 @@ chmod 600 /etc/10kk/certs/client.key
 
 **3. Instalar e iniciar o serviço:**
 ```bash
-sudo /usr/local/bin/10kk-agent -service install \
+sudo /usr/local/bin/nexus-agent -service install \
   -master wss://seu-host/ws/agent \
   -token SEU_TOKEN
 
-sudo systemctl enable 10kk-agent
-sudo systemctl start  10kk-agent
+sudo systemctl enable nexus-agent
+sudo systemctl start  nexus-agent
 ```
 
 ---
@@ -333,13 +333,13 @@ sudo systemctl start  10kk-agent
 
 ```bash
 # Linux
-journalctl -u 10kk-agent -f
+journalctl -u nexus-agent -f
 
 # macOS
-tail -f /var/log/10kk-agent.log
+tail -f /var/log/nexus-agent.log
 
 # Windows (PowerShell)
-Get-EventLog -LogName Application -Source '10kk-agent'
+Get-EventLog -LogName Application -Source 'nexus-agent'
 ```
 
 ---
@@ -347,10 +347,10 @@ Get-EventLog -LogName Application -Source '10kk-agent'
 ### 4. Controle do serviço
 
 ```bash
-10kk-agent -service stop
-10kk-agent -service start
-10kk-agent -service restart
-10kk-agent -service uninstall
+nexus-agent -service stop
+nexus-agent -service start
+nexus-agent -service restart
+nexus-agent -service uninstall
 ```
 
 > **Instalação via Terraform (Cloud Module):** ao provisionar um servidor pelo painel, o cloud-init executa o script `install.sh` automaticamente — nenhuma ação manual é necessária.
@@ -365,11 +365,11 @@ go mod tidy
 make all
 
 # Binários gerados em agent/dist/
-# 10kk-agent-linux-amd64
-# 10kk-agent-linux-arm64
-# 10kk-agent-darwin-arm64
-# 10kk-agent-darwin-amd64
-# 10kk-agent-windows-amd64.exe
+# nexus-agent-linux-amd64
+# nexus-agent-linux-arm64
+# nexus-agent-darwin-arm64
+# nexus-agent-darwin-amd64
+# nexus-agent-windows-amd64.exe
 ```
 
 ---

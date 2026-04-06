@@ -1,4 +1,4 @@
-BIN     := 10kk-agent
+BIN     := nexus-agent
 CMD     := ./cmd/agent
 DIST    := ./dist
 VERSION ?= v1.0.0

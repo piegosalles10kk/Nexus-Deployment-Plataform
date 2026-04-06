@@ -23,11 +23,27 @@ Write-Host "[Nexus] Base URL: $baseUrl"
 # Determine install dir
 $installDir = "C:\NexusAgent"
 $binPath = $installDir + "\nexus-agent.exe"
+$oldBinPath = $binPath + ".old"
 $binUrl = $baseUrl + "/downloads/nexus-agent-windows-amd64.exe"
 
 Write-Host "[Nexus] Creating directory: $installDir"
 if (!(Test-Path -Path $installDir)) {
     New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+}
+
+# --- FILE-LOCK WORKAROUND ---
+$svc = Get-Service -Name "nexus-agent" -ErrorAction SilentlyContinue
+if ($svc) {
+    Write-Host "[Nexus] Stopping existing service..."
+    Stop-Service -Name "nexus-agent" -Force -ErrorAction SilentlyContinue
+    # Give it a second to release the file
+    Start-Sleep -Seconds 2
+}
+
+if (Test-Path -Path $binPath) {
+    Write-Host "[Nexus] File in use protection: Renaming current binary..."
+    Remove-Item -Path $oldBinPath -ErrorAction SilentlyContinue
+    Move-Item -Path $binPath -Destination $oldBinPath -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "[Nexus] Downloading agent from: $binUrl"
