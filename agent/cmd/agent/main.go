@@ -19,11 +19,21 @@ func main() {
 	token := flag.String("token", "", "Provisioning token issued by the platform")
 	flag.Parse()
 
+	// Collect arguments to persist when installing the service
+	var args []string
+	if *masterURL != "" {
+		args = append(args, "-master", *masterURL)
+	}
+	if *token != "" {
+		args = append(args, "-token", *token)
+	}
+
 	// Service configuration for kardianos/service
 	svcConfig := &service.Config{
 		Name:        "nexus-agent",
 		DisplayName: "Nexus Platform Agent",
 		Description: "Connects this host to the Nexus Platform for CI/CD orchestration and monitoring.",
+		Arguments:   args,
 	}
 
 	// Pass master URL and token into the app via env (persisted by -install)
