@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
-  Folder, File, ChevronRight, Download, Upload, Trash2, 
-  Copy, Scissor, Clipboard, Search, ArrowLeft, RefreshCw,
-  MoreVertical, FileText, LayoutGrid, List, FileCode, HardDrive
+  Folder, Download, Upload, Trash2, 
+  Copy, Scissors, Clipboard, Search, ArrowLeft, RefreshCw,
+  MoreVertical, FileText, LayoutGrid, List, FileCode, HardDrive,
+  AlertCircle
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -14,10 +15,12 @@ interface FileEntry {
 }
 
 interface FileManagerProps {
-  nodeId: string;
+  nodeId?: string;
+  projectId?: string;
+  canEdit?: boolean;
 }
 
-export default function FileManager({ nodeId }: FileManagerProps) {
+export default function FileManager({ nodeId, projectId, canEdit = true }: FileManagerProps) {
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,7 +35,10 @@ export default function FileManager({ nodeId }: FileManagerProps) {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/v1/agent/nodes/${nodeId}/files`, { params: { path } });
+      const url = projectId 
+        ? `/v1/agent/projects/${projectId}/files` 
+        : `/v1/agent/nodes/${nodeId}/files`;
+      const res = await api.get(url, { params: { path } });
       setEntries(res.data.data.entries || []);
       setCurrentPath(path);
     } catch (err: any) {
@@ -59,12 +65,16 @@ export default function FileManager({ nodeId }: FileManagerProps) {
   };
 
   const handleDelete = async (entry: FileEntry) => {
+    if (!canEdit) return;
     if (!confirm(`Tem certeza que deseja excluir ${entry.name}?`)) return;
     try {
-      await api.delete(`/v1/agent/nodes/${nodeId}/files`, { params: { path: entry.path } });
+      const url = projectId 
+        ? `/v1/agent/projects/${projectId}/files` 
+        : `/v1/agent/nodes/${nodeId}/files`;
+      await api.delete(url, { params: { path: entry.path } });
       loadFiles(currentPath);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Falha ao deletar.');
+      setError(err.response?.data?.message || 'Falha ao deletar.');
     }
   };
 
@@ -77,13 +87,17 @@ export default function FileManager({ nodeId }: FileManagerProps) {
   };
 
   const handlePaste = async () => {
-    if (!clipboard) return;
+    if (!clipboard || !canEdit) return;
     try {
-      const dest = `${currentPath}/${clipboard.path.split(/[/\\]/).pop()}`;
+      const dest = currentPath ? `${currentPath}/${clipboard.path.split(/[/\\]/).pop()}` : clipboard.path.split(/[/\\]/).pop() || '';
+      const baseUrl = projectId 
+        ? `/v1/agent/projects/${projectId}/files` 
+        : `/v1/agent/nodes/${nodeId}/files`;
+      
       if (clipboard.action === 'copy') {
-        await api.post(`/v1/agent/nodes/${nodeId}/files/copy`, { path: clipboard.path, dest });
+        await api.post(`${baseUrl}/copy`, { path: clipboard.path, dest });
       } else {
-        await api.post(`/v1/agent/nodes/${nodeId}/files/move`, { path: clipboard.path, dest });
+        await api.post(`${baseUrl}/move`, { path: clipboard.path, dest });
         setClipboard(null);
       }
       loadFiles(currentPath);
@@ -94,7 +108,10 @@ export default function FileManager({ nodeId }: FileManagerProps) {
 
   const handleDownload = async (entry: FileEntry) => {
     try {
-      const res = await api.get(`/v1/agent/nodes/${nodeId}/files/read`, { params: { path: entry.path } });
+      const url = projectId 
+        ? `/v1/agent/projects/${projectId}/files/read` 
+        : `/v1/agent/nodes/${nodeId}/files/read`;
+      const res = await api.get(url, { params: { path: entry.path } });
       const contentB64 = res.data.data.content;
       
       const byteCharacters = atob(contentB64);
@@ -105,13 +122,13 @@ export default function FileManager({ nodeId }: FileManagerProps) {
       const byteArray = new Uint8Array(byteNumbers);
       
       const blob = new Blob([byteArray], { type: 'application/octet-stream' });
-      const url = window.URL.createObjectURL(blob);
+      const urlBlob = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = urlBlob;
       a.download = entry.name;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(urlBlob);
       document.body.removeChild(a);
     } catch (err: any) {
       alert(err.response?.data?.message || 'Falha ao baixar arquivo.');
@@ -119,6 +136,7 @@ export default function FileManager({ nodeId }: FileManagerProps) {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canEdit) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -135,7 +153,10 @@ export default function FileManager({ nodeId }: FileManagerProps) {
 
       try {
         const dest = currentPath ? `${currentPath}/${file.name}` : file.name;
-        await api.post(`/v1/agent/nodes/${nodeId}/files/write`, { path: dest, content: b64 });
+        const url = projectId 
+          ? `/v1/agent/projects/${projectId}/files/write` 
+          : `/v1/agent/nodes/${nodeId}/files/write`;
+        await api.post(url, { path: dest, content: b64 });
         loadFiles(currentPath);
       } catch (err: any) {
         alert(err.response?.data?.message || 'Falha no upload.');
@@ -173,19 +194,23 @@ export default function FileManager({ nodeId }: FileManagerProps) {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <div className="h-6 w-px bg-border mx-1" />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="px-3 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent-light text-xs font-bold flex items-center gap-2 transition-colors"
-          >
-            <Upload className="w-4 h-4" /> Upload
-          </button>
-          <button 
-            onClick={handlePaste}
-            disabled={!clipboard}
-            className="px-3 py-1.5 rounded-lg bg-success/10 hover:bg-success/20 text-success text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-30"
-          >
-            <Clipboard className="w-4 h-4" /> Colar {clipboard && `(${clipboard.action})`}
-          </button>
+          {canEdit && (
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent-light text-xs font-bold flex items-center gap-2 transition-colors"
+            >
+              <Upload className="w-4 h-4" /> Upload
+            </button>
+          )}
+          {canEdit && (
+            <button 
+              onClick={handlePaste}
+              disabled={!clipboard}
+              className="px-3 py-1.5 rounded-lg bg-success/10 hover:bg-success/20 text-success text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-30"
+            >
+              <Clipboard className="w-4 h-4" /> Colar {clipboard && `(${clipboard.action})`}
+            </button>
+          )}
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -285,15 +310,21 @@ export default function FileManager({ nodeId }: FileManagerProps) {
                         <Download className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={() => handleCopy(entry)} className="p-1.5 rounded-lg hover:bg-bg-secondary text-text-secondary hover:text-accent transition-colors" title="Copiar">
-                      <Copy className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleCut(entry)} className="p-1.5 rounded-lg hover:bg-bg-secondary text-text-secondary hover:text-accent transition-colors" title="Recortar">
-                      <Scissor className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(entry)} className="p-1.5 rounded-lg hover:bg-bg-secondary text-text-secondary hover:text-danger transition-colors" title="Deletar">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {canEdit && (
+                      <button onClick={() => handleCopy(entry)} className="p-1.5 rounded-lg hover:bg-bg-secondary text-text-secondary hover:text-accent transition-colors" title="Copiar">
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button onClick={() => handleCut(entry)} className="p-1.5 rounded-lg hover:bg-bg-secondary text-text-secondary hover:text-accent transition-colors" title="Recortar">
+                        <Scissors className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button onClick={() => handleDelete(entry)} className="p-1.5 rounded-lg hover:bg-bg-secondary text-text-secondary hover:text-danger transition-colors" title="Deletar">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -342,6 +373,3 @@ export default function FileManager({ nodeId }: FileManagerProps) {
   );
 }
 
-function AlertCircle(props: any) {
-  return <AlertCircle {...props} />;
-}
