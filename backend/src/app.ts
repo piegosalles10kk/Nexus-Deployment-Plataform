@@ -25,6 +25,7 @@ import agentRoutes from './modules/agent/agent.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { startAgentWsServer } from './services/agent-ws.service';
 import { trafficManager } from './modules/gateway/traffic.middleware';
+import { dynamicProxy } from './modules/gateway/proxy.service';
 import { startMonitoring, stopMonitoring } from './services/monitoring.service';
 import { startDockerWatcher } from './services/docker-watcher.service';
 import { initGatewayConf } from './services/nginx-config.service';
@@ -168,6 +169,11 @@ export function createApp() {
   app.use('/api/v1/agent', agentRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/webhook', webhookRoutes);
+
+  // Tunnel proxy middleware — handles requests forwarded by nginx for tunnelled
+  // gateway routes (those whose nginx location block proxies to this server).
+  // Must be registered after all API routes so it only catches non-API paths.
+  app.use(dynamicProxy);
 
   // Error handler (must be last)
   app.use(errorHandler);

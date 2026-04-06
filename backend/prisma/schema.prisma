@@ -193,14 +193,16 @@ model DeployHistory {
 }
 
 model GatewayRoute {
-  id          String   @id @default(uuid())
-  name        String
-  routePath   String   @unique @map("route_path")
-  targetUrl   String   @map("target_url")
-  checkPort   Int      @default(0) @map("check_port")
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid())
+  name          String
+  routePath     String   @unique @map("route_path")
+  targetUrl     String   @map("target_url")
+  checkPort     Int      @default(0) @map("check_port")
+  isActive      Boolean  @default(true) @map("is_active")
+  isTunnelled   Boolean  @default(false) @map("is_tunnelled")
+  tunnelNodeId  String?  @map("tunnel_node_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@map("gateway_routes")
 }

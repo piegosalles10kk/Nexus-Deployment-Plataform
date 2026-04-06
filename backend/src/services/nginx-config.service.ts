@@ -32,6 +32,30 @@ async function generateGatewayConf(): Promise<string> {
 
   const blocks = routes.map((route) => {
     const safePath = route.routePath.replace(/\/+$/, ''); // strip trailing slashes
+
+    // Tunnelled routes: nginx forwards to the Express backend, which then
+    // dispatches the request through the agent WebSocket tunnel.
+    if ((route as any).isTunnelled) {
+      return `
+# Route: ${route.name} (Tunnel via Agent)
+location ${safePath}/ {
+    proxy_pass http://10kk-backend:4500;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_connect_timeout 10s;
+    proxy_read_timeout 35s;
+}
+
+location = ${safePath} {
+    return 301 ${safePath}/;
+}
+`;
+    }
+
+    // Direct routes: nginx proxies straight to the target service.
     const target = route.targetUrl.replace(/\/+$/, '');
     return `
 # Route: ${route.name}

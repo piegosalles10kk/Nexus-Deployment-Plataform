@@ -7,6 +7,8 @@ export interface GatewayRoute {
   targetUrl: string;
   checkPort: number;
   isActive: boolean;
+  isTunnelled: boolean;
+  tunnelNodeId: string | null;
   createdAt: string;
   updatedAt: string;
 }

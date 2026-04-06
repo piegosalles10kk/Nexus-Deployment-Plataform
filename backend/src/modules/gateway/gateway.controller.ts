@@ -33,19 +33,32 @@ export const GatewayController = {
    */
   async createRoute(req: Request, res: Response) {
     try {
-      const { name, checkPort, isActive, routePath: customPath, targetUrl: customTarget } = req.body;
+      const {
+        name, checkPort, isActive,
+        routePath: customPath, targetUrl: customTarget,
+        isTunnelled, tunnelNodeId,
+      } = req.body;
 
       if (!name) {
         return res.status(400).json({ message: 'O nome da rota é obrigatório' });
       }
 
-      const portNumber = parseInt(checkPort, 10) || 0;
-      let finalPath = customPath;
+      const portNumber    = parseInt(checkPort, 10) || 0;
+      const tunnelEnabled = Boolean(isTunnelled);
+      let finalPath   = customPath;
       let finalTarget = customTarget;
       let finalIsActive = isActive !== undefined ? isActive : true;
 
-      // Mode 1: Local Discovery (Port > 0)
-      if (portNumber > 0) {
+      if (tunnelEnabled) {
+        // Mode 3: Tunnel Route — path and targetUrl are required, port is irrelevant
+        if (!finalPath || !finalTarget) {
+          return res.status(400).json({ message: 'Caminho e URL local de destino são obrigatórios para rotas com túnel.' });
+        }
+        if (!tunnelNodeId) {
+          return res.status(400).json({ message: 'Um nó agente deve ser selecionado para rotas com túnel.' });
+        }
+      } else if (portNumber > 0) {
+        // Mode 1: Local Discovery (Port > 0)
         if (!finalPath) {
           finalPath = `/service/${generateRandomPath()}`;
         }
@@ -72,10 +85,12 @@ export const GatewayController = {
       const route = await prisma.gatewayRoute.create({
         data: {
           name,
-          routePath: finalPath,
-          targetUrl: finalTarget,
-          checkPort: portNumber,
-          isActive: finalIsActive,
+          routePath:    finalPath,
+          targetUrl:    finalTarget,
+          checkPort:    portNumber,
+          isActive:     finalIsActive,
+          isTunnelled:  tunnelEnabled,
+          tunnelNodeId: tunnelEnabled ? (tunnelNodeId ?? null) : null,
         },
       });
 
@@ -98,7 +113,7 @@ export const GatewayController = {
   async updateRoute(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
-      const { name, routePath, targetUrl, checkPort, isActive } = req.body;
+      const { name, routePath, targetUrl, checkPort, isActive, isTunnelled, tunnelNodeId } = req.body;
 
       const portNumber = parseInt(checkPort, 10) || 0;
 
@@ -113,8 +128,10 @@ export const GatewayController = {
           name,
           routePath,
           targetUrl,
-          checkPort: portNumber,
+          checkPort:    portNumber,
           isActive,
+          isTunnelled:  isTunnelled !== undefined ? Boolean(isTunnelled) : undefined,
+          tunnelNodeId: tunnelNodeId !== undefined ? tunnelNodeId : undefined,
         },
       });
 

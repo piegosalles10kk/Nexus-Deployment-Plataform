@@ -1,14 +1,19 @@
 package network
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/10kk/agent/internal/docker"
@@ -19,9 +24,12 @@ import (
 )
 
 const (
-	maxBackoff     = 60 * time.Second
-	writeTimeout   = 10 * time.Second
-	pingInterval   = 15 * time.Second
+	maxBackoff   = 60 * time.Second
+	writeTimeout = 10 * time.Second
+	pingInterval = 15 * time.Second
+
+	// Maximum response body size for the reverse tunnel (5 MB).
+	tunnelMaxBodyBytes = 5 * 1024 * 1024
 )
 
 // inboundMsg is the shape of commands received from the master.
@@ -42,6 +50,13 @@ type inboundMsg struct {
 	ProxyPort        int               `json:"proxyPort,omitempty"`
 	HealthCheckURL   string            `json:"healthCheckUrl,omitempty"`
 	HealthCheckDelay int               `json:"healthCheckDelay,omitempty"`
+	// reverse-tunnel fields
+	RequestID string            `json:"requestId,omitempty"`
+	Method    string            `json:"method,omitempty"`
+	Path      string            `json:"path,omitempty"`
+	TargetURL string            `json:"targetUrl,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
+	Body      string            `json:"body,omitempty"` // base64-encoded
 }
 
 // RunConnectionLoop dials the master and re-dials on any disconnect.
@@ -207,7 +222,9 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 		go func() {
 			send := func(v any) {
 				b, err := json.Marshal(v)
-				if err != nil { return }
+				if err != nil {
+					return
+				}
 				select {
 				case out <- b:
 				case <-ctx.Done():
@@ -221,7 +238,7 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 			} else {
 				import_exec = exec.Command("sh", "-c", msg.Command)
 			}
-			
+
 			// We stream stdout/stderr live
 			stdout, err := import_exec.StdoutPipe()
 			if err != nil {
@@ -250,7 +267,9 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 					if n > 0 {
 						send(map[string]any{"type": "shell_output", "sessionId": msg.SessionID, "message": string(buf[:n])})
 					}
-					if err != nil { break }
+					if err != nil {
+						break
+					}
 				}
 			}()
 
@@ -261,7 +280,9 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 					if n > 0 {
 						send(map[string]any{"type": "shell_output", "sessionId": msg.SessionID, "message": string(buf[:n])})
 					}
-					if err != nil { break }
+					if err != nil {
+						break
+					}
 				}
 			}()
 
@@ -276,6 +297,9 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 
 			send(map[string]any{"type": "shell_exit", "sessionId": msg.SessionID, "code": exitCode})
 		}()
+
+	case "proxy_request":
+		go handleProxyRequest(ctx, msg, out)
 
 	case "update":
 		if msg.UpdateURL != "" && msg.Version != "" {
@@ -344,6 +368,104 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 	default:
 		log.Printf("[ws] unknown action: %s", msg.Action)
 	}
+}
+
+// handleProxyRequest performs a local HTTP request on behalf of the master
+// and sends a proxy_response back through the WebSocket.
+func handleProxyRequest(ctx context.Context, msg inboundMsg, out chan<- []byte) {
+	sendResponse := func(statusCode int, headers map[string]string, bodyB64 string, errMsg string) {
+		resp := map[string]any{
+			"type":       "proxy_response",
+			"requestId":  msg.RequestID,
+			"statusCode": statusCode,
+			"headers":    headers,
+			"body":       bodyB64,
+		}
+		if errMsg != "" {
+			resp["error"] = errMsg
+		}
+		b, err := json.Marshal(resp)
+		if err != nil {
+			return
+		}
+		select {
+		case out <- b:
+		case <-ctx.Done():
+		}
+	}
+
+	if msg.RequestID == "" || msg.TargetURL == "" || msg.Method == "" {
+		sendResponse(400, map[string]string{}, "", "missing requestId, targetUrl, or method")
+		return
+	}
+
+	// Build the full target URL.
+	targetURL := msg.TargetURL
+	if len(msg.Path) > 0 && msg.Path != "/" {
+		targetURL = fmt.Sprintf("%s%s", strings.TrimRight(msg.TargetURL, "/"), msg.Path)
+	}
+
+	// Decode the request body.
+	var bodyReader io.Reader
+	if msg.Body != "" {
+		bodyBytes, err := base64.StdEncoding.DecodeString(msg.Body)
+		if err != nil {
+			sendResponse(400, map[string]string{}, "", "invalid base64 body: "+err.Error())
+			return
+		}
+		bodyReader = bytes.NewReader(bodyBytes)
+	}
+
+	// Create the request with a 25s timeout (inside the master's 30s window).
+	reqCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(reqCtx, msg.Method, targetURL, bodyReader)
+	if err != nil {
+		sendResponse(502, map[string]string{}, "", "failed to build request: "+err.Error())
+		return
+	}
+
+	// Forward headers from the master.
+	for k, v := range msg.Headers {
+		httpReq.Header.Set(k, v)
+	}
+
+	client := &http.Client{
+		// Don't follow redirects automatically — let the caller decide.
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	httpResp, err := client.Do(httpReq)
+	if err != nil {
+		sendResponse(502, map[string]string{}, "", "request failed: "+err.Error())
+		return
+	}
+	defer httpResp.Body.Close()
+
+	// Read response body with a size cap.
+	limited := io.LimitReader(httpResp.Body, tunnelMaxBodyBytes+1)
+	respBytes, err := io.ReadAll(limited)
+	if err != nil {
+		sendResponse(502, map[string]string{}, "", "failed to read response body: "+err.Error())
+		return
+	}
+	if int64(len(respBytes)) > tunnelMaxBodyBytes {
+		sendResponse(502, map[string]string{}, "", fmt.Sprintf("response body exceeds %d bytes limit", tunnelMaxBodyBytes))
+		return
+	}
+
+	// Collect response headers.
+	respHeaders := make(map[string]string, len(httpResp.Header))
+	for k, vals := range httpResp.Header {
+		if len(vals) > 0 {
+			respHeaders[k] = vals[0]
+		}
+	}
+
+	sendResponse(httpResp.StatusCode, respHeaders, base64.StdEncoding.EncodeToString(respBytes), "")
 }
 
 // backoffDuration returns exponential backoff capped at maxBackoff.

@@ -11,11 +11,13 @@
  *  - Update Node.status = ONLINE / OFFLINE and last_ping in Prisma
  *  - Relay metrics payload to the frontend via Socket.io
  *  - Forward log_line messages to the correct Socket.io project room
+ *  - Reverse-tunnel HTTP requests from the Gateway through the agent (proxy_request / proxy_response)
  */
 import https from 'https';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import jwt from 'jsonwebtoken';
 import { Server as SocketServer } from 'socket.io';
@@ -27,9 +29,85 @@ import { getRedisClient } from '../config/redis';
 // Map nodeId → WebSocket, so the master can push commands to specific agents
 const agentSockets = new Map<string, WebSocket>();
 
+// ── Reverse-tunnel state ──────────────────────────────────────────────────────
+
+/** Pending tunnel proxy requests: requestId → resolve callback */
+const pendingProxyRequests = new Map<string, (response: ProxyResponse) => void>();
+
+/** Maximum body size for a single tunnel request/response (5 MB). */
+const TUNNEL_MAX_BODY_BYTES = 5 * 1024 * 1024;
+
+/** Per-request tunnel timeout in milliseconds. */
+const TUNNEL_TIMEOUT_MS = 30_000;
+
+export interface ProxyRequestData {
+  method:    string;
+  /** Path relative to the route prefix — e.g. "/api/users/1" */
+  path:      string;
+  /** The agent-local base URL — e.g. "http://localhost:8080" */
+  targetUrl: string;
+  headers:   Record<string, string>;
+  /** Request body, base64-encoded. Empty string for bodyless methods. */
+  body:      string;
+}
+
+export interface ProxyResponse {
+  requestId:  string;
+  statusCode: number;
+  headers:    Record<string, string>;
+  /** Response body, base64-encoded. */
+  body:       string;
+  error?:     string;
+}
+
 export function getAgentSocket(nodeId: string): WebSocket | undefined {
   return agentSockets.get(nodeId);
 }
+
+/**
+ * Sends an HTTP request through the named agent's WebSocket tunnel and
+ * returns the proxied response.  Rejects if the agent is offline or the
+ * request exceeds TUNNEL_TIMEOUT_MS.
+ */
+export function sendProxyRequest(nodeId: string, data: ProxyRequestData): Promise<ProxyResponse> {
+  const ws = agentSockets.get(nodeId);
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return Promise.reject(new Error(`Agent ${nodeId} is not connected`));
+  }
+
+  // Guard against oversized bodies before touching the network.
+  const bodyBytes = Buffer.byteLength(data.body, 'base64');
+  if (bodyBytes > TUNNEL_MAX_BODY_BYTES) {
+    return Promise.reject(new Error(`Request body (${bodyBytes} bytes) exceeds tunnel limit of ${TUNNEL_MAX_BODY_BYTES} bytes`));
+  }
+
+  const requestId = randomUUID();
+
+  return new Promise<ProxyResponse>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingProxyRequests.delete(requestId);
+      reject(new Error(`Tunnel proxy request timed out after ${TUNNEL_TIMEOUT_MS}ms`));
+    }, TUNNEL_TIMEOUT_MS);
+
+    pendingProxyRequests.set(requestId, (response) => {
+      clearTimeout(timer);
+      resolve(response);
+    });
+
+    ws.send(JSON.stringify({
+      type:      'proxy_request',
+      action:    'proxy_request',
+      requestId,
+      method:    data.method,
+      path:      data.path,
+      targetUrl: data.targetUrl,
+      headers:   data.headers,
+      body:      data.body,
+    }));
+  });
+}
+
+// ── WebSocket server ──────────────────────────────────────────────────────────
 
 /**
  * Start the mTLS WebSocket server.
@@ -93,11 +171,11 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
     const remoteIp = req.socket.remoteAddress ?? undefined;
     const agentOs = (req.headers['x-agent-os'] as string) || undefined;
     const agentVersion = (req.headers['x-agent-version'] as string) || undefined;
-    
+
     prisma.node.update({
       where: { id: nodeId },
-      data:  { 
-        status: 'ONLINE', 
+      data:  {
+        status: 'ONLINE',
         ipAddress: remoteIp,
         os: agentOs,
         version: agentVersion
@@ -154,6 +232,22 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
         case 'shell_exit':
           io.to(`server:${nodeId}`).emit('agent:shell_exit', { sessionId: msg.sessionId, code: msg.code });
           break;
+
+        case 'proxy_response': {
+          // Agent has fulfilled a tunnel proxy request — resolve the pending promise.
+          const resolver = pendingProxyRequests.get(msg.requestId);
+          if (resolver) {
+            pendingProxyRequests.delete(msg.requestId);
+            resolver({
+              requestId:  msg.requestId,
+              statusCode: msg.statusCode ?? 502,
+              headers:    msg.headers   ?? {},
+              body:       msg.body      ?? '',
+              error:      msg.error,
+            });
+          }
+          break;
+        }
 
         case 'route_register': {
           // Agent finished a deploy and is registering the gateway route for the container
