@@ -57,6 +57,9 @@ type inboundMsg struct {
 	TargetURL string            `json:"targetUrl,omitempty"`
 	Headers   map[string]string `json:"headers,omitempty"`
 	Body      string            `json:"body,omitempty"` // base64-encoded
+	// port-scan fields
+	StartPort int `json:"startPort,omitempty"`
+	EndPort   int `json:"endPort,omitempty"`
 }
 
 // RunConnectionLoop dials the master and re-dials on any disconnect.
@@ -325,6 +328,32 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 
 	case "proxy_request":
 		go handleProxyRequest(ctx, msg, out)
+
+	case "scan_ports":
+		go func() {
+			start := msg.StartPort
+			if start <= 0 {
+				start = 1
+			}
+			end := msg.EndPort
+			if end <= 0 || end > 65535 {
+				end = 10000
+			}
+			log.Printf("[scan] starting port scan for %s (%d-%d)", msg.SessionID, start, end)
+			ports := ScanActivePorts(ctx, start, end)
+			resp := map[string]any{
+				"type":      "scan_result",
+				"requestId": msg.RequestID,
+				"ports":     ports,
+			}
+			b, err := json.Marshal(resp)
+			if err == nil {
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+		}()
 
 	case "update":
 		if msg.UpdateURL != "" && msg.Version != "" {

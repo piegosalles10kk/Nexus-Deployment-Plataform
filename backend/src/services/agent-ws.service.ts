@@ -34,6 +34,9 @@ const agentSockets = new Map<string, WebSocket>();
 /** Pending tunnel proxy requests: requestId → resolve callback */
 const pendingProxyRequests = new Map<string, (response: ProxyResponse) => void>();
 
+/** Pending agent port scan requests: requestId → resolve callback */
+const pendingScanRequests = new Map<string, (ports: number[]) => void>();
+
 /** Maximum body size for a single tunnel request/response (5 MB). */
 const TUNNEL_MAX_BODY_BYTES = 5 * 1024 * 1024;
 
@@ -116,6 +119,39 @@ export function sendProxyRequest(nodeId: string, data: ProxyRequestData): Promis
       targetUrl: data.targetUrl,
       headers:   data.headers,
       body:      data.body,
+    }));
+  });
+}
+
+/**
+ * Requests an active port scan (1-10000) from a specific agent.
+ * Returns a promise that resolves with the list of open ports.
+ */
+export function requestPortScan(nodeId: string): Promise<number[]> {
+  const ws = agentSockets.get(nodeId);
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return Promise.reject(new Error(`Agent ${nodeId} is not connected`));
+  }
+
+  const requestId = randomUUID();
+
+  return new Promise<number[]>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingScanRequests.delete(requestId);
+      reject(new Error(`Port scan request timed out after 30s`));
+    }, 30_000);
+
+    pendingScanRequests.set(requestId, (ports) => {
+      clearTimeout(timer);
+      resolve(ports);
+    });
+
+    ws.send(JSON.stringify({
+      type:      'scan_ports',
+      action:    'scan_ports',
+      requestId,
+      startPort: 1,
+      endPort:   10000,
     }));
   });
 }
@@ -258,6 +294,16 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
               body:       msg.body      ?? '',
               error:      msg.error,
             });
+          }
+          break;
+        }
+
+        case 'scan_result': {
+          // Agent returned list of open ports
+          const resolver = pendingScanRequests.get(msg.requestId);
+          if (resolver) {
+            pendingScanRequests.delete(msg.requestId);
+            resolver(msg.ports ?? []);
           }
           break;
         }

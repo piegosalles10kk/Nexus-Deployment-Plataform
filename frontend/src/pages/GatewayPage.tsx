@@ -20,6 +20,8 @@ const GatewayPage: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [activePorts, setActivePorts] = useState<number[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
+  const [isScanningAgent, setIsScanningAgent] = useState(false);
+  const [agentActivePorts, setAgentActivePorts] = useState<number[]>([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -122,6 +124,21 @@ const GatewayPage: React.FC = () => {
       console.error('Error scanning ports:', error);
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const scanAgentPorts = async () => {
+    if (!formData.tunnelNodeId) return;
+    setIsScanningAgent(true);
+    setAgentActivePorts([]);
+    try {
+      const res = await api.get(`/v1/agent/nodes/${formData.tunnelNodeId}/scan-ports`);
+      setAgentActivePorts(res.data?.data?.ports ?? []);
+    } catch (error) {
+      console.error('Error scanning agent ports:', error);
+      alert('Falha ao escanear portas do agente. Verifique se ele está online.');
+    } finally {
+      setIsScanningAgent(false);
     }
   };
 
@@ -451,6 +468,17 @@ const GatewayPage: React.FC = () => {
                           </option>
                         ))}
                       </select>
+                      {formData.tunnelNodeId && (
+                        <button
+                          type="button"
+                          onClick={scanAgentPorts}
+                          disabled={isScanningAgent}
+                          className="mt-2 flex items-center gap-2 text-[10px] font-bold text-violet-400 hover:text-violet-300 transition-colors uppercase tracking-wider disabled:opacity-50"
+                        >
+                          <RefreshCw size={12} className={isScanningAgent ? 'animate-spin' : ''} />
+                          {isScanningAgent ? 'Escaneando Agente...' : 'Descobrir serviços no agente'}
+                        </button>
+                      )}
                       {nodes.filter(n => n.status === 'ONLINE').length === 0 && (
                         <p className="text-[10px] text-amber-500 mt-1">Nenhum agente online no momento.</p>
                       )}
@@ -478,7 +506,25 @@ const GatewayPage: React.FC = () => {
                         placeholder="Ex: http://localhost:8080"
                         required
                       />
-                      <p className="text-[10px] text-zinc-600 mt-1 italic">URL que o agente acessará localmente ao receber requisições.</p>
+                      {agentActivePorts.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-1 duration-300">
+                          {agentActivePorts.map(port => (
+                            <button
+                              key={port}
+                              type="button"
+                              onClick={() => {
+                                setFormData({ ...formData, targetUrl: `http://localhost:${port}` });
+                                setAgentActivePorts([]); // hide after selection
+                              }}
+                              className="px-2 py-1 bg-violet-600/10 hover:bg-violet-600/20 border border-violet-500/20 rounded-md text-[10px] font-mono text-violet-300 transition-all flex items-center gap-1"
+                            >
+                              <Zap size={8} className="text-amber-400" />
+                              {port}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-[10px] text-zinc-600 mt-1 italic">Dica: Use o botão de descoberta acima para encontrar portas automágicamente.</p>
                     </div>
                   </>
                 )}

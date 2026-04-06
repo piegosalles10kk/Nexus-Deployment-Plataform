@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../../config/database';
 import { env } from '../../config/env';
 import { issueClientCert } from '../../services/ca.service';
-import { getAgentSocket } from '../../services/agent-ws.service';
+import { getAgentSocket, requestPortScan } from '../../services/agent-ws.service';
 import { getRedisClient } from '../../config/redis';
 
 // ── POST /api/v1/agent/enroll ─────────────────────────────────────────────────
@@ -170,5 +170,20 @@ export async function getNodeTelemetry(req: Request<{ id: string }>, res: Respon
     res.json({ status: 'success', data: { telemetry } });
   } catch (error) {
     next(error);
+  }
+}
+
+// ── GET /api/v1/agent/nodes/:id/scan-ports ──────────────────────────────────
+/**
+ * Requests a real-time port scan from a connected agent.
+ */
+export async function scanNodePorts(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const ports = await requestPortScan(id);
+    res.json({ status: 'success', data: { ports } });
+  } catch (error) {
+    // If agent is offline or timeout occurs
+    res.status(502).json({ status: 'error', message: error instanceof Error ? error.message : 'Port scan failed' });
   }
 }
