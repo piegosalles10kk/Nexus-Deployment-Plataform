@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  Server, ArrowLeft, Terminal, Cpu, 
+  Server, ArrowLeft, Terminal, Cpu, Activity,
   Globe, Clock, TerminalSquare, Layers, CheckCircle2, AlertCircle, Play
 } from 'lucide-react';
 import api from '../services/api';
 import { getSocket } from '../services/socket';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 export default function ServerDetailsPage() {
   const { id } = useParams();
@@ -13,7 +14,8 @@ export default function ServerDetailsPage() {
   
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'console'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'console' | 'telemetry'>('overview');
+  const [telemetryHistory, setTelemetryHistory] = useState<any[]>([]);
 
   // Terminal state
   const [command, setCommand] = useState('');
@@ -25,8 +27,14 @@ export default function ServerDetailsPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await api.get(`/cloud/servers/${id}/details`);
-        setData(res.data.data);
+        const [resDetails, resTelem] = await Promise.all([
+          api.get(`/cloud/servers/${id}/details`),
+          api.get(`/v1/agent/nodes/${id}/telemetry`).catch(() => ({ data: { data: { telemetry: [] } } }))
+        ]);
+        setData(resDetails.data.data);
+        if (resTelem.data?.data?.telemetry) {
+           setTelemetryHistory(resTelem.data.data.telemetry);
+        }
       } catch (err: any) {
         alert(err.response?.data?.message || 'Falha ao carregar servidor.');
         navigate('/cloud');
@@ -61,10 +69,22 @@ export default function ServerDetailsPage() {
     socket.on('agent:shell_output', onOutput);
     socket.on('agent:shell_exit', onExit);
 
+    const onTelemetry = (msg: any) => {
+      if (msg.nodeId === data.node.id) {
+        setTelemetryHistory(prev => {
+          const arr = [...prev, msg.data];
+          if (arr.length > 100) arr.shift();
+          return arr;
+        });
+      }
+    };
+    socket.on('node:telemetry', onTelemetry);
+
     return () => {
       socket.emit('leave:server', data.node.id);
       socket.off('agent:shell_output', onOutput);
       socket.off('agent:shell_exit', onExit);
+      socket.off('node:telemetry', onTelemetry);
     };
   }, [id, data?.node?.id]);
 
@@ -140,6 +160,14 @@ export default function ServerDetailsPage() {
           }`}
         >
           <TerminalSquare className="w-4 h-4" /> Console Remoto
+        </button>
+        <button
+          onClick={() => setActiveTab('telemetry')}
+          className={`pb-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'telemetry' ? 'border-success text-success' : 'border-transparent text-text-muted hover:text-text-primary'
+          }`}
+        >
+          <Activity className="w-4 h-4" /> RMM / Telemetria
         </button>
       </div>
 
@@ -254,6 +282,135 @@ export default function ServerDetailsPage() {
                 {isCommandRunning ? <Clock className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
               </button>
             </form>
+          </div>
+        )}
+
+        {activeTab === 'telemetry' && (
+          <div className="space-y-6">
+            {(!telemetryHistory || telemetryHistory.length === 0) ? (
+               <div className="bg-bg-card border border-border rounded-xl p-10 flex flex-col items-center justify-center">
+                 <Activity className="w-10 h-10 text-text-muted mb-4 opacity-50" />
+                 <p className="text-text-primary font-bold">Sem dados de telemetria</p>
+                 <p className="text-text-muted text-sm mt-1">Aguardando o agente enviar as primeiras leituras ou o agente está offline.</p>
+               </div>
+            ) : (
+               <>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="bg-bg-card border border-border rounded-xl p-5">
+                     <p className="text-xs text-text-muted font-bold uppercase tracking-widest mb-4">Uso de CPU (%)</p>
+                     <div className="h-48">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={telemetryHistory} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="colorCpu" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                            <XAxis dataKey="timestamp" tickFormatter={() => ''} stroke="#ffffff20" />
+                            <YAxis domain={[0, 100]} stroke="#ffffff40" tick={{ fontSize: 10 }} />
+                            <RechartsTooltip 
+                               contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', fontSize: '12px' }}
+                               labelFormatter={() => ''}
+                               formatter={(v: any) => [`${Number(v).toFixed(1)}%`, 'CPU']}
+                            />
+                            <Area type="monotone" dataKey="cpuUsage" stroke="#38bdf8" fillOpacity={1} fill="url(#colorCpu)" isAnimationActive={false} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                     </div>
+                   </div>
+
+                   <div className="bg-bg-card border border-border rounded-xl p-5">
+                     <p className="text-xs text-text-muted font-bold uppercase tracking-widest mb-4">Uso de Memória RAM (%)</p>
+                     <div className="h-48">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={telemetryHistory} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="colorRam" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#c084fc" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#c084fc" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                            <XAxis dataKey="timestamp" tickFormatter={() => ''} stroke="#ffffff20" />
+                            <YAxis domain={[0, 100]} stroke="#ffffff40" tick={{ fontSize: 10 }} />
+                            <RechartsTooltip 
+                               contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', fontSize: '12px' }}
+                               labelFormatter={() => ''}
+                               formatter={(v: any) => [`${Number(v).toFixed(1)}%`, 'RAM']}
+                            />
+                            <Area type="monotone" dataKey="ramUsage" stroke="#c084fc" fillOpacity={1} fill="url(#colorRam)" isAnimationActive={false} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                     </div>
+                   </div>
+                 </div>
+
+                 {(() => {
+                   const latest = telemetryHistory[telemetryHistory.length - 1];
+                   return latest ? (
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <div className="bg-bg-card border border-border rounded-xl p-5 flex items-center justify-between">
+                         <div>
+                            <p className="text-xs text-text-muted font-bold uppercase tracking-widest mb-1">Armazenamento (Disco)</p>
+                            <div className="flex items-baseline gap-2">
+                               <span className="text-2xl font-bold">{latest.diskUsage ? latest.diskUsage.toFixed(1) : 0}%</span>
+                               <span className="text-sm text-text-muted">
+                                  {latest.diskUsed ? (latest.diskUsed / 1e9).toFixed(1) : 0}GB / {latest.diskTotal ? (latest.diskTotal / 1e9).toFixed(1) : 0}GB
+                               </span>
+                            </div>
+                         </div>
+                         <svg width="40" height="40" viewBox="0 0 40 40">
+                           <circle cx="20" cy="20" r="16" fill="none" stroke="#fff" strokeOpacity="0.1" strokeWidth="6" />
+                           <circle cx="20" cy="20" r="16" fill="none" stroke="#2dd4bf" strokeWidth="6" 
+                                   strokeDasharray={100} strokeDashoffset={100 - (latest.diskUsage || 0)} 
+                                   transform="rotate(-90 20 20)" 
+                           />
+                         </svg>
+                       </div>
+                       
+                       <div className="bg-bg-card border border-border rounded-xl p-5">
+                          <p className="text-xs text-text-muted font-bold uppercase tracking-widest mb-2">Tráfego de Rede</p>
+                          <div className="flex gap-6">
+                            <div>
+                               <p className="text-[10px] text-text-muted">UPLINK (Tx)</p>
+                               <p className="text-lg font-bold text-accent-light">{(latest.netTxSec / 1024).toFixed(1)} KB/s</p>
+                            </div>
+                            <div>
+                               <p className="text-[10px] text-text-muted">DOWNLINK (Rx)</p>
+                               <p className="text-lg font-bold text-success">{(latest.netRxSec / 1024).toFixed(1)} KB/s</p>
+                            </div>
+                          </div>
+                       </div>
+                     </div>
+                   ) : null;
+                 })()}
+
+                 <div className="bg-bg-card border border-border rounded-xl overflow-hidden mt-4">
+                    <div className="px-5 py-3 border-b border-border bg-bg-secondary">
+                      <p className="text-xs font-bold uppercase tracking-widest text-text-primary">Processos em Destaque</p>
+                    </div>
+                    <div className="divide-y divide-border">
+                       {telemetryHistory[telemetryHistory.length - 1]?.topProcs?.map((proc: any) => (
+                          <div key={proc.pid} className="px-5 py-3 flex items-center justify-between hover:bg-white/5 transition-colors">
+                             <div className="flex items-center gap-4">
+                                <span className="text-[10px] text-text-muted font-mono w-12">{proc.pid}</span>
+                                <span className="text-sm font-bold text-text-primary truncate max-w-[200px] md:max-w-xs">{proc.name}</span>
+                             </div>
+                             <div className="flex items-center gap-6 text-sm font-mono text-text-secondary">
+                                <span className="w-16 text-right"><span className="text-[10px] text-text-muted mr-1">CPU</span>{proc.cpu.toFixed(1)}%</span>
+                                <span className="w-16 text-right"><span className="text-[10px] text-text-muted mr-1">RAM</span>{proc.ram.toFixed(1)}%</span>
+                             </div>
+                          </div>
+                       ))}
+                       {(!telemetryHistory[telemetryHistory.length - 1]?.topProcs || telemetryHistory[telemetryHistory.length - 1].topProcs.length === 0) && (
+                         <div className="p-4 text-center text-sm text-text-muted font-mono">Processos não reportados</div>
+                       )}
+                    </div>
+                 </div>
+               </>
+            )}
           </div>
         )}
       </div>

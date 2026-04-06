@@ -14,5 +14,6 @@ router.get(   '/nodes',             authenticate, authorize('ADM'), agentControl
 router.post(  '/nodes',             authenticate, authorize('ADM'), agentController.createNode);
 router.delete('/nodes/:id',         authenticate, authorize('ADM'), agentController.deleteNode);
 router.post(  '/nodes/:id/command', authenticate, authorize('ADM'), agentController.sendCommand);
+router.get(   '/nodes/:id/telemetry', authenticate, authorize('ADM'), agentController.getNodeTelemetry);
 
 export default router;

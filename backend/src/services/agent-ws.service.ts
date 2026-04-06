@@ -22,6 +22,7 @@ import { Server as SocketServer } from 'socket.io';
 import { env } from '../config/env';
 import prisma from '../config/database';
 import { getCACert, getCAKey } from './ca.service';
+import { getRedisClient } from '../config/redis';
 
 // Map nodeId → WebSocket, so the master can push commands to specific agents
 const agentSockets = new Map<string, WebSocket>();
@@ -110,8 +111,24 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
           break;
 
         case 'metrics':
-          // Broadcast to frontend via Socket.io
+          // Legacy or fallback broadcast
           io.emit('node:metrics', { nodeId, data: msg.data });
+          break;
+
+        case 'telemetry':
+          // Save to Redis (capped to last 100 entries)
+          getRedisClient().then((redis) => {
+            const key = `node:${nodeId}:telemetry`;
+            const m = redis.multi();
+            // LPUSH adds to the head (index 0)
+            m.lPush(key, JSON.stringify(msg.payload));
+            // LTRIM keeps indices 0 to 99
+            m.lTrim(key, 0, 99);
+            m.exec().catch(err => console.error('Redis telemetry save failed', err));
+          }).catch(() => {});
+
+          // Broadcast to connected web clients
+          io.emit('node:telemetry', { nodeId, data: msg.payload });
           break;
 
         case 'log_line':

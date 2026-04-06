@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { getSocket } from '../services/socket';
 import {
   Cloud, Plus, Trash2, Server, Loader2, AlertCircle, CheckCircle2,
   RefreshCw, X, Globe, Cpu, RotateCw, Copy, Check
@@ -26,6 +27,26 @@ interface CloudServer {
   agentVersion: string | null;
   lastError: string | null;
   createdAt: string;
+}
+
+function Gauge({ percent, label, color }: { percent: number; label: string; color: string }) {
+  const radius = 22;
+  const circumference = radius * Math.PI;
+  const strokeDashoffset = circumference - (Math.min(Math.max(percent, 0), 100) / 100) * circumference;
+  return (
+    <div className="flex flex-col items-center justify-center shrink-0 w-16">
+       <svg width="50" height="25" viewBox="0 0 50 25" className="overflow-visible">
+          <path d="M 3 25 A 22 22 0 0 1 47 25" fill="none" stroke="currentColor" className="text-white/10" strokeWidth="5" strokeLinecap="round" />
+          <path d="M 3 25 A 22 22 0 0 1 47 25" fill="none" stroke={color} strokeWidth="5" 
+                strokeDasharray={circumference} strokeDashoffset={isNaN(strokeDashoffset) ? circumference : strokeDashoffset} 
+                strokeLinecap="round" className="transition-all duration-1000 ease-out" />
+       </svg>
+       <span className="text-[10px] font-bold mt-1.5 text-text-primary leading-none text-center">
+         {isNaN(percent) ? '--' : percent.toFixed(1)}%<br/>
+         <span className="text-[8px] uppercase tracking-widest text-text-muted mt-0.5 block">{label}</span>
+       </span>
+    </div>
+  );
 }
 
 const statusConfig = {
@@ -368,24 +389,47 @@ function ServerCard({
   const [restarting, setRestarting] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [telemetry, setTelemetry] = useState<any>(null);
+
+  useEffect(() => {
+    if (!server.agentConnected) return;
+    const socket = getSocket();
+    const onTelemetry = (msg: any) => {
+      if (msg.nodeId === server.id) {
+        setTelemetry(msg.data);
+      }
+    };
+    socket.on('node:telemetry', onTelemetry);
+    return () => {
+      socket.off('node:telemetry', onTelemetry);
+    };
+  }, [server.agentConnected, server.id]);
+
   const cfg = statusConfig[server.status];
 
   const handleDelete = async () => {
-    if (!confirm(`Destruir o servidor "${server.name}" via Terraform? Esta ação é irreversível.`)) return;
+    if (!confirm(`Destruir o servidor "${server.name}"? Esta ação é irreversível.`)) return;
     setDeleting(true);
     try {
-      await api.delete(`/cloud/providers/${providerId}/servers/${server.id}`);
-      // Trigger exit animation, then notify parent
+      if (providerId === 'onpremise') {
+        await api.delete(`/v1/agent/nodes/${server.id}`);
+      } else {
+        await api.delete(`/cloud/providers/${providerId}/servers/${server.id}`);
+      }
       setRemoving(true);
       setTimeout(() => onDeleted(), 400);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Falha ao destruir servidor.');
+      alert(err.response?.data?.message || 'Falha ao remover servidor.');
       setDeleting(false);
     }
   };
 
   const handleRestart = async () => {
     if (!confirm(`Reiniciar o servidor "${server.name}"?`)) return;
+    if (providerId === 'onpremise') {
+      alert('Servidores On-Premise não podem ser reiniciados pelo Terraform. O agente continua ativo.');
+      return;
+    }
     setRestarting(true);
     try {
       const res = await api.post(`/cloud/providers/${providerId}/servers/${server.id}/restart`);
@@ -474,6 +518,14 @@ function ServerCard({
             </details>
           )}
         </div>
+        
+        {server.agentConnected && telemetry && (
+           <div className="flex items-center gap-4 bg-bg-secondary/50 px-4 py-2 rounded-xl border border-border/50 shrink-0">
+             <Gauge percent={telemetry.cpuUsage} label="CPU" color="#38bdf8" />
+             <div className="w-px h-8 bg-border/50"></div>
+             <Gauge percent={telemetry.ramUsage} label="RAM" color="#a78bfa" />
+           </div>
+        )}
       </div>
       
       {/* Actions */}
@@ -495,6 +547,64 @@ function ServerCard({
             {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
          </button>
       </div>
+    </div>
+  );
+}
+
+function OnPremiseProviderCard({ nodes, onRefresh }: { nodes: any[], onRefresh: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const unstableCount = nodes.filter(n => n.status !== 'ONLINE').length;
+
+  useEffect(() => {
+    if (!expanded || unstableCount === 0) return;
+    const interval = setInterval(onRefresh, 10000);
+    return () => clearInterval(interval);
+  }, [expanded, unstableCount, onRefresh]);
+
+  const servers = nodes.map(node => ({
+    id: node.id,
+    name: node.name,
+    region: 'Local / On-Premise',
+    instanceType: `${node.os || 'unknown'}-${node.arch || 'unknown'}`,
+    ip: node.ipAddress || '',
+    status: node.status === 'ONLINE' ? 'RUNNING' : 'STOPPED',
+    agentConnected: node.status === 'ONLINE',
+    agentVersion: node.version,
+    lastError: ''
+  } as any));
+
+  return (
+    <div className="bg-bg-card border border-border rounded-lg overflow-hidden">
+      <div className="p-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-bg-secondary border border-border flex items-center justify-center text-lg shrink-0" title="On-Premise">
+            🖥️
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-text-primary truncate">Servidores On-Premise</p>
+            <p className="text-xs text-text-muted">LOCAL · Datacenter · {nodes.length} servidor(es)</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+             onClick={() => setExpanded(v => !v)}
+             className="relative px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-bg-card-hover text-xs font-semibold transition-colors"
+          >
+             {expanded ? 'Recolher' : 'Servidores'}
+             {expanded && unstableCount > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-warning animate-pulse" />}
+          </button>
+        </div>
+      </div>
+      {expanded && (
+        <div className="border-t border-border p-4 space-y-3 bg-bg-primary">
+          {servers.map(s => <ServerCard key={s.id} server={s} providerId="onpremise" onDeleted={onRefresh} />)}
+          <div className="flex items-center justify-between">
+            <button onClick={onRefresh} className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors">
+              <RefreshCw className="w-3 h-3" /> Atualizar lista
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -782,6 +892,7 @@ function ManualServerModal({ onClose }: { onClose: () => void }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function CloudPage() {
   const [providers, setProviders] = useState<CloudProvider[]>([]);
+  const [onPremiseNodes, setOnPremiseNodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddProvider, setShowAddProvider] = useState(false);
@@ -790,10 +901,14 @@ export default function CloudPage() {
   const load = async () => {
     setError('');
     try {
-      const res = await api.get('/cloud/providers');
-      setProviders(res.data.data.providers);
+      const [resProv, resNodes] = await Promise.all([
+        api.get('/cloud/providers'),
+        api.get('/v1/agent/nodes')
+      ]);
+      setProviders(resProv.data.data.providers);
+      setOnPremiseNodes(resNodes.data.data.nodes);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Falha ao carregar providers.');
+      setError(err.response?.data?.message || 'Falha ao carregar dados do cluster.');
     } finally {
       setLoading(false);
     }
@@ -855,23 +970,34 @@ export default function CloudPage() {
         <div className="flex items-center gap-2 p-4 rounded-lg bg-danger/8 border border-danger/25 text-danger text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" /><span>{error}</span>
         </div>
-      ) : providers.length === 0 ? (
+      ) : providers.length === 0 && onPremiseNodes.length === 0 ? (
         <div className="bg-bg-card border border-border rounded-lg p-16 text-center">
           <Cloud className="w-12 h-12 mx-auto mb-4 text-text-muted opacity-30" />
-          <p className="text-sm font-semibold text-text-secondary mb-1">Nenhum provider configurado</p>
-          <p className="text-xs text-text-muted mb-6">Adicione um provider AWS, Azure, GCP ou DigitalOcean para começar a provisionar servidores.</p>
-          <button
-            onClick={() => setShowAddProvider(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-light text-white text-sm font-semibold transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Adicionar primeiro provider
-          </button>
+          <p className="text-sm font-semibold text-text-secondary mb-1">Nenhum servidor configurado</p>
+          <p className="text-xs text-text-muted mb-6">Adicione um provider cloud ou vincule um servidor local para prosseguir.</p>
+          <div className="flex justify-center gap-3">
+            <button
+              onClick={() => setShowAddProvider(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-light text-white text-sm font-semibold transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Cloud
+            </button>
+            <button
+              onClick={() => setShowManualServer(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-secondary hover:bg-bg-card-hover border border-border text-text-primary text-sm font-semibold transition-colors"
+            >
+              <Server className="w-4 h-4" /> On-Premise
+            </button>
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
           {providers.map((p) => (
             <ProviderCard key={p.id} provider={p} onDeleted={load} onRefresh={load} />
           ))}
+          {onPremiseNodes.length > 0 && (
+            <OnPremiseProviderCard nodes={onPremiseNodes} onRefresh={load} />
+          )}
         </div>
       )}
 
@@ -880,7 +1006,7 @@ export default function CloudPage() {
       )}
       
       {showManualServer && (
-        <ManualServerModal onClose={() => setShowManualServer(false)} />
+        <ManualServerModal onClose={() => setShowManualServer(false)} onAdded={load} />
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import prisma from '../../config/database';
 import { env } from '../../config/env';
 import { issueClientCert } from '../../services/ca.service';
 import { getAgentSocket } from '../../services/agent-ws.service';
+import { getRedisClient } from '../../config/redis';
 
 // ── POST /api/v1/agent/enroll ─────────────────────────────────────────────────
 /**
@@ -135,6 +136,30 @@ export async function sendCommand(
 
     ws.send(JSON.stringify(req.body));
     res.json({ status: 'success', message: 'Command dispatched.' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ── GET /api/v1/agent/nodes/:id/telemetry ────────────────────────────────────
+/**
+ * Fetches the historical telemetry data (last 100 entries) from Redis.
+ */
+export async function getNodeTelemetry(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const redis = await getRedisClient();
+    const key = `node:${id}:telemetry`;
+    
+    // Fetch the 100 entries. They are stored as strings.
+    const rawData = await redis.lRange(key, 0, 99);
+    
+    // Parse strings and return in chronological order (LPUSH stores newest at index 0, so we reverse it)
+    const telemetry = rawData.map(str => {
+      try { return JSON.parse(str); } catch { return null; }
+    }).filter(Boolean).reverse();
+
+    res.json({ status: 'success', data: { telemetry } });
   } catch (error) {
     next(error);
   }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/10kk/agent/internal/docker"
 	"github.com/10kk/agent/internal/metrics"
+	"github.com/10kk/agent/internal/telemetry"
 	"github.com/10kk/agent/internal/updater"
 	"github.com/gorilla/websocket"
 )
@@ -131,6 +132,26 @@ func connect(ctx context.Context, masterURL, token string, metricsCh <-chan metr
 			case <-ticker.C:
 				b, _ := json.Marshal(map[string]string{"type": "ping"})
 				outCh <- b
+			}
+		}
+	}()
+
+	// --- Goroutine: periodic telemetry ---
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				t, err := telemetry.Collect()
+				if err == nil && t != nil {
+					b, err := json.Marshal(map[string]any{"type": "telemetry", "payload": t})
+					if err == nil {
+						outCh <- b
+					}
+				}
 			}
 		}
 	}()
