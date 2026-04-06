@@ -23,7 +23,8 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Create a default empty gateway.conf so Nginx starts without errors
 # The real file is written by the backend via the shared Docker volume
-RUN echo '# Nexus Gateway — initialized (no routes yet)' > /etc/nginx/conf.d/gateway.conf
+RUN mkdir -p /etc/nginx/nexus-gateway && \
+    echo '# Nexus Gateway — initialized (no routes yet)' > /etc/nginx/nexus-gateway/gateway.conf
 
 # Expose port 8000
 EXPOSE 8000

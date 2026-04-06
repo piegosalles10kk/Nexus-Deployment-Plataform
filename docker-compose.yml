@@ -88,7 +88,7 @@ services:
     env_file:
       - .env
     volumes:
-      - gateway_conf:/etc/nginx/conf.d
+      - gateway_conf:/etc/nginx/nexus-gateway
     depends_on:
       - cicd-backend
     networks:
