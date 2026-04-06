@@ -51,6 +51,7 @@ export async function triggerDeploy(req: Request<{ projectId: string }>, res: Re
       branch: project.branchTarget,
       projectName: project.name,
       environmentType: project.environmentType,
+      nodeId: project.nodeId ?? undefined,
       io,
     }).catch((err) => {
       console.error(`Pipeline error for deploy ${deploy.id}:`, err);

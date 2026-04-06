@@ -69,6 +69,7 @@ export async function handleGithubWebhook(req: Request, res: Response, next: Nex
         branch: project.branchTarget,
         projectName: project.name,
         environmentType: project.environmentType,
+        nodeId: project.nodeId ?? undefined,
         commitHash,
         commitMsg,
         io,

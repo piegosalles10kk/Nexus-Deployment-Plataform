@@ -65,6 +65,19 @@ export function getAgentSocket(nodeId: string): WebSocket | undefined {
 }
 
 /**
+ * Sends a remove command to the named agent to stop and delete a container.
+ * Fire-and-forget — rejects if the agent is offline.
+ */
+export function sendRemoveCommand(nodeId: string, imageName: string): void {
+  const ws = agentSockets.get(nodeId);
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.warn(`[agent-ws] sendRemoveCommand: agent ${nodeId} is not connected`);
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'command', action: 'remove', imageName }));
+}
+
+/**
  * Sends an HTTP request through the named agent's WebSocket tunnel and
  * returns the proxied response.  Rejects if the agent is offline or the
  * request exceeds TUNNEL_TIMEOUT_MS.

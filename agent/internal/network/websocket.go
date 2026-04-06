@@ -298,6 +298,31 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 			send(map[string]any{"type": "shell_exit", "sessionId": msg.SessionID, "code": exitCode})
 		}()
 
+	case "remove":
+		go func() {
+			if msg.ImageName == "" {
+				log.Printf("[remove] imageName is empty, skipping")
+				return
+			}
+			log.Printf("[remove] stopping and removing container: %s", msg.ImageName)
+			var stopCmd, rmCmd *exec.Cmd
+			if runtime.GOOS == "windows" {
+				stopCmd = exec.Command("docker", "stop", msg.ImageName)
+				rmCmd   = exec.Command("docker", "rm", "-f", msg.ImageName)
+			} else {
+				stopCmd = exec.Command("docker", "stop", msg.ImageName)
+				rmCmd   = exec.Command("docker", "rm", "-f", msg.ImageName)
+			}
+			if out, err := stopCmd.CombinedOutput(); err != nil {
+				log.Printf("[remove] docker stop: %v — %s", err, string(out))
+			}
+			if out, err := rmCmd.CombinedOutput(); err != nil {
+				log.Printf("[remove] docker rm: %v — %s", err, string(out))
+			} else {
+				log.Printf("[remove] container %s removed", msg.ImageName)
+			}
+		}()
+
 	case "proxy_request":
 		go handleProxyRequest(ctx, msg, out)
 

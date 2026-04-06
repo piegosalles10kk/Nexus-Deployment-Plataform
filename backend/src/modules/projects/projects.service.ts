@@ -1,6 +1,7 @@
 import prisma from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { CreateProjectInput, UpdateProjectInput, SaveWorkflowInput } from './projects.schema';
+import { sendRemoveCommand } from '../../services/agent-ws.service';
 
 export async function listProjects(page: number = 1, limit: number = 20) {
   const skip = (page - 1) * limit;
@@ -88,7 +89,22 @@ export async function createProject(data: CreateProjectInput) {
 }
 
 export async function updateProject(id: string, data: UpdateProjectInput) {
-  await getProjectById(id);
+  const existing = await getProjectById(id);
+
+  // Migration: if the project is moving from one NODE to another, clean up the old container.
+  const oldNodeId = (existing as any).nodeId as string | null;
+  const newNodeId = data.nodeId ?? oldNodeId;
+  const isNodeMigration =
+    existing.environmentType === 'NODE' &&
+    oldNodeId &&
+    newNodeId &&
+    oldNodeId !== newNodeId;
+
+  if (isNodeMigration) {
+    const imageName = existing.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    sendRemoveCommand(oldNodeId!, imageName);
+  }
+
   return prisma.project.update({ where: { id }, data });
 }
 
