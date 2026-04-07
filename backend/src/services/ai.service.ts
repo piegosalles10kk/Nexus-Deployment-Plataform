@@ -33,9 +33,48 @@ export class AIService {
       throw new Error('GEMINI_API_KEY não configurada no servidor.');
     }
 
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const prompt = this.generatePrompt(files, fileContents);
+    const models = ['gemini-2.5-pro', 'gemini-2.5-flash'];
+    const maxRetries = 3;
 
-    const prompt = `
+    let lastError: any = null;
+
+    for (const modelName of models) {
+      const model = this.genAI.getGenerativeModel({ model: modelName });
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`🤖 Tentativa ${attempt}/3 com o modelo ${modelName}...`);
+          const result = await model.generateContent(prompt);
+          const response = await result.response;
+          const text = response.text();
+
+          // Clean up the response if it contains markdown code blocks
+          const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          
+          try {
+            return JSON.parse(jsonStr) as AIAnalysisResult;
+          } catch (err) {
+            console.error(`Falha ao parsear reposta JSON do modelo ${modelName}:`, text);
+            throw new Error('Resposta inváida da IA.');
+          }
+        } catch (err: any) {
+          lastError = err;
+          console.warn(`⚠️ Erro na tentativa ${attempt} do modelo ${modelName}:`, err.message || err);
+          
+          // Wait briefly before retrying same model
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          }
+        }
+      }
+    }
+
+    throw new Error(`A IA falhou após todas as tentativas extras. Último erro: ${lastError?.message || 'Desconhecido'}`);
+  }
+
+  private generatePrompt(files: string[], fileContents: Record<string, string>): string {
+    return `
       Você é um especialista em DevOps e Cloud. Analise os seguintes arquivos e a estrutura de um repositório Git para sugerir a melhor configuração de deploy no Nexus Platform.
 
       Estrutura de Arquivos:
@@ -67,20 +106,6 @@ export class AIService {
       3. WorkflowSteps são apenas se necessário comandos extras pré-build (como testes ou migrações).
       4. A porta deve ser a porta interna que a aplicação ouve dentro do container.
     `;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
-    // Clean up the response if it contains markdown code blocks
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    try {
-      return JSON.parse(jsonStr) as AIAnalysisResult;
-    } catch (err) {
-      console.error('Falha ao parsear resposta do Gemini:', text);
-      throw new Error('Falha ao processar sugestões da IA.');
-    }
   }
 }
 
