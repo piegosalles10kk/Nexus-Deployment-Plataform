@@ -36,6 +36,7 @@ export const updateProjectSchema = z.object({
   proxyPort: z.number().int().positive().nullable().optional(),
   cloudServerId: z.string().uuid().nullable().optional(),
   nodeId: z.string().uuid().nullable().optional(),
+  envVars: z.array(z.string()).optional(),
 });
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;

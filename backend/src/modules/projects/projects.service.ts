@@ -2,6 +2,7 @@ import prisma from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { CreateProjectInput, UpdateProjectInput, SaveWorkflowInput } from './projects.schema';
 import { sendRemoveCommand } from '../../services/agent-ws.service';
+import { encrypt } from '../../services/crypto.service';
 
 export async function listProjects(page: number = 1, limit: number = 20) {
   const skip = (page - 1) * limit;
@@ -89,11 +90,12 @@ export async function createProject(data: CreateProjectInput) {
 }
 
 export async function updateProject(id: string, data: UpdateProjectInput) {
+  const { envVars, ...updateData } = data;
   const existing = await getProjectById(id);
 
   // Migration: if the project is moving from one NODE to another, clean up the old container.
   const oldNodeId = (existing as any).nodeId as string | null;
-  const newNodeId = data.nodeId ?? oldNodeId;
+  const newNodeId = updateData.nodeId ?? oldNodeId;
   const isNodeMigration =
     existing.environmentType === 'NODE' &&
     oldNodeId &&
@@ -105,7 +107,27 @@ export async function updateProject(id: string, data: UpdateProjectInput) {
     sendRemoveCommand(oldNodeId!, imageName);
   }
 
-  return prisma.project.update({ where: { id }, data });
+  const updated = await prisma.project.update({ where: { id }, data: updateData as any });
+
+  if (envVars && envVars.length > 0) {
+    for (const keyName of envVars) {
+      const existingSecret = await prisma.projectSecret.findUnique({
+        where: { projectId_keyName: { projectId: id, keyName } }
+      });
+
+      if (!existingSecret) {
+        await prisma.projectSecret.create({
+          data: {
+            projectId: id,
+            keyName,
+            encryptedValue: encrypt(''),
+          }
+        });
+      }
+    }
+  }
+
+  return updated;
 }
 
 export async function deleteProject(id: string) {

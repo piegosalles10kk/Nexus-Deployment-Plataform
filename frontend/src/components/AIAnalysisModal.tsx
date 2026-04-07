@@ -46,7 +46,8 @@ export default function AIAnalysisModal({ projectId, isOpen, onClose, onApplied,
     try {
       // 1. Update Project basic config (port)
       await api.put(`/projects/${projectId}`, {
-        proxyPort: analysis.suggestions.port
+        proxyPort: analysis.suggestions.port,
+        envVars: analysis.suggestions.envVars
       });
 
       // 2. Save Workflow Steps
