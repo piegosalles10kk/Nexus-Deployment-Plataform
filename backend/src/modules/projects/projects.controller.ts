@@ -13,6 +13,7 @@ import {
   moveProjectFile,
   startContainerLogs,
   stopContainerLogs,
+  syncProjectRepository,
 } from '../../services/agent-ws.service';
 import { aiService } from '../../services/ai.service';
 
@@ -249,6 +250,20 @@ export async function stopLogs(req: Request<{ id: string }>, res: Response, next
     const { project, imageName } = await resolveNodeAndImage(req.params.id);
     stopContainerLogs(project.nodeId!, imageName);
     res.json({ status: 'success', message: 'Log streaming parado' });
+  } catch (error) {
+    next(error);
+  }
+}
+export async function syncRepository(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    await syncProjectRepository(
+      project.nodeId!,
+      project.repoUrl,
+      project.branchTarget,
+      imageName
+    );
+    res.json({ status: 'success', message: 'Repositório sincronizado com sucesso' });
   } catch (error) {
     next(error);
   }

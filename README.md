@@ -6,22 +6,24 @@ O **Nexus** é uma solução self-hosted completa de CI/CD e gerenciamento de in
 
 ## Funcionalidades
 
-### CI/CD Pipeline
-- Integração nativa com GitHub via Webhooks (HMAC-SHA256)
-- **Pipeline LOCAL automático:** `git clone` → `npm ci` → `testes` → `docker build` → `deploy` com labels de proxy
-- **Pipeline CLOUD:** deploy é roteado ao agente remoto via WebSocket mTLS — o agente executa o build localmente no servidor e faz streaming dos logs de volta em tempo real
-- Workflow steps customizados por projeto: `LOCAL_COMMAND` (spawn local) ou `REMOTE_SSH_COMMAND` (via ssh2)
-- Container iniciado com labels `10kk.proxy.host` / `10kk.proxy.port` para auto-registro no gateway
-- Histórico de deploys com logs completos, hash de commit, autor e resultado de testes
-- Deploy manual pelo painel ou via API
-- Cancelamento de deploy em andamento
-- Secrets criptografados por projeto (AES-256-GCM), injetados como variáveis de ambiente no container
+### CI/CD Pipeline & AI Engine
+- **Análise Inteligente (Gemini 2.5 Pro/Flash):** Detecção automática de framework, porta interna e geração de Dockerfile otimizado.
+- **Auto-Provisionamento de Secrets:** Identifica variáveis necessárias via `.env.example` e cria os slots de segredos automaticamente.
+- **Repositórios Persistentes:** Utiliza `./projects/` local no Agente com operações de `git fetch` + `reset --hard`, garantindo deploys ultra-rápidos e cache de build eficiente.
+- **Workflow Steps Dinâmicos:** Geração de passos de pipeline (build, test, migrate) sugeridos pela IA e customizáveis por projeto.
+- **Deploy Híbrido:** Execução local ou remota (via mTLS) com labels `10kk.proxy` para auto-registro no gateway.
+- Histórico de deploys com logs completos, hash de commit e cancelamento em tempo real.
+- Secrets criptografados (AES-256-GCM) injetados nativamente no container.
 
-### Monitoramento em Tempo Real
-- Métricas de CPU e memória por container via Socket.io (sem polling)
-- Gráficos históricos (Recharts) com 20 pontos por instância
-- Health check HTTP com latência em ms
-- Status por instância: `RUNNING`, `UNHEALTHY`, `STOPPED`
+### Monitoramento & Logs
+- **Log Streaming Real-time:** Visualização instantânea de logs de containers via WebSocket diretamente no dashboard.
+- **Métricas Vivas:** CPU e memória via Socket.io (sem polling) com gráficos históricos (Recharts).
+- **Health Check HTTP:** Latência e status dinâmico (`RUNNING`, `UNHEALTHY`, `STOPPED`).
+
+### Gestão de Arquivos (FileManager)
+- **Navegação Root-Level:** Navegador de arquivos integrado para gerenciar a pasta `./projects`.
+- **Editor Remoto:** Edição direta de arquivos (ex: `.env`, arquivos de config) pelo painel.
+- **Operações via WebSocket:** Suporte a mover, copiar e excluir arquivos remotamente no Agente.
 
 ### Auto-scaling Horizontal
 - Política por projeto: thresholds de CPU, memória e latência
@@ -385,6 +387,7 @@ Configuradas no `docker-compose.yml`:
 | `ENCRYPTION_KEY` | Chave AES-256 para criptografia de secrets (hex, 64 chars) |
 | `DOCKER_PROXY_HOST` | URL do Docker Socket Proxy (ex: `tcp://docker-proxy:2375`) |
 | `AGENT_WS_PORT` | Porta do servidor WSS mTLS para agentes (padrão: `8443`) |
+| `GEMINI_API_KEY` | Chave de API do Google Gemini para análise de repositórios |
 
 ---
 
@@ -392,7 +395,7 @@ Configuradas no `docker-compose.yml`:
 
 | Camada | Tecnologias |
 |---|---|
-| Backend | Node.js, Express, TypeScript, Prisma ORM, Socket.io, Dockerode, Zod |
+| Backend | Node.js, Express, TypeScript, Prisma ORM, Socket.io, Dockerode, Zod, **Google Gemini 2.5 SDK** |
 | Frontend | React 18, Vite, Tailwind CSS 4, TanStack Query, Recharts, Lucide |
 | Banco de dados | PostgreSQL 16, Redis 7 |
 | Agente | Go 1.25, kardianos/service, gorilla/websocket, Docker SDK, gopsutil |

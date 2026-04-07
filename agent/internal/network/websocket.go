@@ -440,6 +440,26 @@ func handleCommand(ctx context.Context, msg inboundMsg, out chan<- []byte) {
 			send(map[string]string{"type": "deploy_done"})
 		}()
 
+	case "git_sync":
+		go func() {
+			send := func(v any) {
+				b, _ := json.Marshal(v)
+				select {
+				case out <- b:
+				case <-ctx.Done():
+				}
+			}
+			logFn := func(line string) {
+				send(map[string]string{"type": "log_line", "message": line})
+			}
+			err := docker.GitSync(ctx, msg.Repo, msg.Branch, msg.ImageName, logFn)
+			if err != nil {
+				send(map[string]any{"type": "git_sync_result", "requestId": msg.RequestID, "success": false, "error": err.Error()})
+				return
+			}
+			send(map[string]any{"type": "git_sync_result", "requestId": msg.RequestID, "success": true})
+		}()
+
 	case "stop":
 		go func() {
 			send := func(v any) {

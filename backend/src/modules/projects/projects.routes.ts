@@ -33,6 +33,7 @@ router.post('/:id/files/move', authorize('ADM', 'TECNICO'), projectsController.m
 router.delete('/:id/files', authorize('ADM', 'TECNICO'), projectsController.deleteFile);
 
 // AI & Logs
+router.post('/:id/sync',       authorize('ADM', 'TECNICO'), projectsController.syncRepository);
 router.post('/:id/analyze',    authorize('ADM', 'TECNICO'), projectsController.analyzeProject);
 router.post('/:id/logs/start', authorize('ADM', 'TECNICO'), projectsController.startLogs);
 router.post('/:id/logs/stop',  authorize('ADM', 'TECNICO'), projectsController.stopLogs);

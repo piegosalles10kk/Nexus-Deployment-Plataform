@@ -139,6 +139,7 @@ export default function ProjectPage() {
   
   // AI Analysis State
   const [analyzing, setAnalyzing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [aiResult, setAiResult] = useState<any | null>(null);
   const [showAIModal, setShowAIModal] = useState(false);
 
@@ -265,6 +266,19 @@ export default function ProjectPage() {
     }
   };
 
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await api.post(`/projects/${id}/sync`);
+      alert('Repositório sincronizado com sucesso! Os arquivos agora estão disponíveis para análise.');
+    } catch (err: any) {
+      console.error('Falha ao sincronizar:', err);
+      alert('Erro ao sincronizar repositório: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleAIAnalysis = async () => {
     setAnalyzing(true);
     try {
@@ -320,9 +334,19 @@ export default function ProjectPage() {
         {hasRole('ADM', 'TECNICO') && (
           <div className="flex items-center gap-2 shrink-0">
             <button
+              onClick={handleSync}
+              disabled={syncing || deploying}
+              title="Baixar arquivos do repositório para análise ou deploy"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-bg-secondary text-text-primary hover:bg-bg-card-hover font-semibold text-sm transition-all disabled:opacity-50"
+            >
+              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 text-accent-light" />}
+              Sincronizar
+            </button>
+            <div className="h-6 w-px bg-border mx-1" />
+            <button
               onClick={handleAIAnalysis}
-              disabled={analyzing || deploying}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-accent/20 bg-accent/5 text-accent-light hover:bg-accent/10 font-semibold text-sm transition-all"
+              disabled={analyzing || deploying || syncing}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-accent/20 bg-accent/5 text-accent-light hover:bg-accent/10 font-semibold text-sm transition-all disabled:opacity-50"
             >
               {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 fill-current" />}
               Analisar com IA

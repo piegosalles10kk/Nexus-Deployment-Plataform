@@ -52,41 +52,11 @@ func RunDeploy(ctx context.Context, req DeployRequest, onLog func(string)) Deplo
 		branch = "main"
 	}
 
-	// 1. Prepare persistent project directory
-	if err := os.MkdirAll(projectsBaseDir, 0755); err != nil {
-		return DeployResult{Err: fmt.Errorf("mkdir projects: %w", err)}
+	// 1. Prepare persistent project directory (Clone or Sync)
+	if err := GitSync(ctx, req.Repo, branch, req.ImageName, onLog); err != nil {
+		return DeployResult{Err: err}
 	}
 	repoDir := filepath.Join(projectsBaseDir, req.ImageName)
-
-	gitDir := filepath.Join(repoDir, ".git")
-	if _, err := os.Stat(gitDir); err == nil {
-		// Already cloned — fetch latest commits
-		onLog("▶ git fetch origin " + branch)
-		if fetchErr := runCmd(ctx, onLog, repoDir,
-			GetExecutable("git"), "fetch", "--depth", "1", "origin", branch); fetchErr != nil {
-			// Fetch failed (e.g. remote changed) — wipe and re-clone
-			onLog("git fetch falhou, re-clonando: " + fetchErr.Error())
-			_ = os.RemoveAll(repoDir)
-		} else {
-			onLog("▶ git reset --hard FETCH_HEAD")
-			if err := runCmd(ctx, onLog, repoDir,
-				GetExecutable("git"), "reset", "--hard", "FETCH_HEAD"); err != nil {
-				return DeployResult{Err: fmt.Errorf("git reset: %w", err)}
-			}
-		}
-	}
-
-	// Re-check: if directory doesn't exist (first time or wiped above), clone
-	if _, err := os.Stat(gitDir); err != nil {
-		if mkErr := os.MkdirAll(repoDir, 0755); mkErr != nil {
-			return DeployResult{Err: fmt.Errorf("mkdir repoDir: %w", mkErr)}
-		}
-		onLog("▶ git clone " + req.Repo + " (branch: " + branch + ")")
-		if err := runCmd(ctx, onLog, repoDir,
-			GetExecutable("git"), "clone", "--depth", "1", "--branch", branch, req.Repo, "."); err != nil {
-			return DeployResult{Err: fmt.Errorf("git clone: %w", err)}
-		}
-	}
 
 	// 2. Generate .env file from provided environment variables (overwrites existing)
 	if len(req.EnvVars) > 0 {

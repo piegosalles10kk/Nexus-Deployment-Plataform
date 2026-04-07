@@ -145,6 +145,10 @@ export function stopContainerLogs(nodeId: string, containerId: string): void {
   ws.send(JSON.stringify({ type: 'command', action: 'stop_logs', container_id: containerId }));
 }
 
+export function syncProjectRepository(nodeId: string, repo: string, branch: string, imageName: string): Promise<any> {
+  return sendAgentRequest(nodeId, { type: 'command', action: 'git_sync', repo, branch, imageName }, 60000);
+}
+
 // ── File manager commands ─────────────────────────────────────────────────────
 
 export interface FileEntry {
@@ -435,6 +439,7 @@ export async function startAgentWsServer(io: SocketServer): Promise<void> {
           break;
         }
 
+        case 'git_sync_result':
         case 'container_action_result':
         case 'file_list':
         case 'file_content':
