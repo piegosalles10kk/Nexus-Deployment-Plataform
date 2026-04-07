@@ -133,6 +133,18 @@ export function restartContainer(nodeId: string, imageName: string): Promise<voi
   return sendAgentRequest(nodeId, { type: 'command', action: 'restart', imageName });
 }
 
+export function startContainerLogs(nodeId: string, containerId: string): void {
+  const ws = agentSockets.get(nodeId);
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'command', action: 'stream_logs', container_id: containerId }));
+}
+
+export function stopContainerLogs(nodeId: string, containerId: string): void {
+  const ws = agentSockets.get(nodeId);
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'command', action: 'stop_logs', container_id: containerId }));
+}
+
 // ── File manager commands ─────────────────────────────────────────────────────
 
 export interface FileEntry {

@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import MetricsChart, { MetricPoint } from '../components/MetricsChart';
 import FileManager from '../components/FileManager';
+import LogViewer from '../components/LogViewer';
+import AIAnalysisModal from '../components/AIAnalysisModal';
 
 interface WorkflowStep {
   id?: string;
@@ -113,7 +115,7 @@ interface Secret {
   projectId: string;
 }
 
-const tabs = ['Visão Geral', 'Instâncias', 'Histórico', 'Terminal', 'Arquivos', 'Configurações'] as const;
+const tabs = ['Visão Geral', 'Instâncias', 'Histórico', 'Logs', 'Terminal', 'Arquivos', 'Configurações'] as const;
 type Tab = typeof tabs[number];
 
 const inputClass = 'w-full px-3 py-2.5 rounded-lg bg-bg-input border border-border text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 transition-colors';
@@ -134,6 +136,12 @@ export default function ProjectPage() {
   const [selectedDeployId, setSelectedDeployId] = useState<string | null>(null);
   const [containerMetrics, setContainerMetrics] = useState<Record<string, ContainerMetrics>>({});
   const [metricsHistory, setMetricsHistory] = useState<Record<string, MetricPoint[]>>({});
+  
+  // AI Analysis State
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiResult, setAiResult] = useState<any | null>(null);
+  const [showAIModal, setShowAIModal] = useState(false);
+
   const logsEndRef = useRef<HTMLDivElement>(null);
   const MAX_HISTORY = 20;
 
@@ -257,6 +265,19 @@ export default function ProjectPage() {
     }
   };
 
+  const handleAIAnalysis = async () => {
+    setAnalyzing(true);
+    try {
+      const res = await api.post(`/projects/${id}/analyze`);
+      setAiResult(res.data.data);
+      setShowAIModal(true);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Falha ao analisar repositório.');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   if (loading || !project) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -298,6 +319,15 @@ export default function ProjectPage() {
 
         {hasRole('ADM', 'TECNICO') && (
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleAIAnalysis}
+              disabled={analyzing || deploying}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-accent/20 bg-accent/5 text-accent-light hover:bg-accent/10 font-semibold text-sm transition-all"
+            >
+              {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 fill-current" />}
+              Analisar com IA
+            </button>
+            <div className="h-6 w-px bg-border mx-1" />
             {deploying && (
               <button
                 onClick={cancelDeploy}
@@ -356,11 +386,12 @@ export default function ProjectPage() {
           if (tab === 'Terminal' && !hasRole('ADM', 'TECNICO')) return null;
           if (tab === 'Configurações' && !hasRole('ADM', 'TECNICO')) return null;
           if (tab === 'Arquivos' && project.environmentType === 'LOCAL') return null;
-          const icons = {
+          const icons: Record<string, any> = {
             'Visão Geral': Activity,
             'Instâncias': Layers,
             'Histórico': History,
             'Terminal': TerminalIcon,
+            'Logs': TerminalIcon,
             'Arquivos': FolderOpen,
             'Configurações': Settings,
           };
@@ -393,6 +424,7 @@ export default function ProjectPage() {
           />
         )}
         {activeTab === 'Histórico' && <HistoryTab deploys={deploys} onSelect={(id) => setSelectedDeployId(id)} />}
+        {activeTab === 'Logs' && <LogViewer projectId={id!} />}
         {activeTab === 'Terminal' && <LogsTab logs={logs} deploying={deploying} logsEndRef={logsEndRef} />}
         {activeTab === 'Arquivos' && (
           <FileManager
@@ -402,6 +434,16 @@ export default function ProjectPage() {
         )}
         {activeTab === 'Configurações' && <SettingsTab project={project} secrets={secrets} onUpdate={loadProject} onDelete={deleteProject} canDelete={hasRole('ADM')} />}
       </div>
+
+      {showAIModal && aiResult && (
+        <AIAnalysisModal
+          projectId={id!}
+          isOpen={showAIModal}
+          analysis={aiResult}
+          onClose={() => setShowAIModal(false)}
+          onApplied={loadProject}
+        />
+      )}
 
       {selectedDeployId && (
         <DeployLogsModal deployId={selectedDeployId} onClose={() => setSelectedDeployId(null)} />

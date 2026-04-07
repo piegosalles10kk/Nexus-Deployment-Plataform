@@ -36,7 +36,7 @@ export default function FileManager({ nodeId, projectId, canEdit = true }: FileM
     setError(null);
     try {
       const url = projectId 
-        ? `/v1/agent/projects/${projectId}/files` 
+        ? `/projects/${projectId}/files` 
         : `/v1/agent/nodes/${nodeId}/files`;
       const res = await api.get(url, { params: { path } });
       setEntries(res.data.data.entries || []);
@@ -69,7 +69,7 @@ export default function FileManager({ nodeId, projectId, canEdit = true }: FileM
     if (!confirm(`Tem certeza que deseja excluir ${entry.name}?`)) return;
     try {
       const url = projectId 
-        ? `/v1/agent/projects/${projectId}/files` 
+        ? `/projects/${projectId}/files` 
         : `/v1/agent/nodes/${nodeId}/files`;
       await api.delete(url, { params: { path: entry.path } });
       loadFiles(currentPath);
@@ -91,7 +91,7 @@ export default function FileManager({ nodeId, projectId, canEdit = true }: FileM
     try {
       const dest = currentPath ? `${currentPath}/${clipboard.path.split(/[/\\]/).pop()}` : clipboard.path.split(/[/\\]/).pop() || '';
       const baseUrl = projectId 
-        ? `/v1/agent/projects/${projectId}/files` 
+        ? `/projects/${projectId}/files` 
         : `/v1/agent/nodes/${nodeId}/files`;
       
       if (clipboard.action === 'copy') {
@@ -109,7 +109,7 @@ export default function FileManager({ nodeId, projectId, canEdit = true }: FileM
   const handleDownload = async (entry: FileEntry) => {
     try {
       const url = projectId 
-        ? `/v1/agent/projects/${projectId}/files/read` 
+        ? `/projects/${projectId}/files/content` 
         : `/v1/agent/nodes/${nodeId}/files/read`;
       const res = await api.get(url, { params: { path: entry.path } });
       const contentB64 = res.data.data.content;
@@ -153,10 +153,16 @@ export default function FileManager({ nodeId, projectId, canEdit = true }: FileM
 
       try {
         const dest = currentPath ? `${currentPath}/${file.name}` : file.name;
-        const url = projectId 
-          ? `/v1/agent/projects/${projectId}/files/write` 
+        const isProject = !!projectId;
+        const url = isProject 
+          ? `/projects/${projectId}/files/content` 
           : `/v1/agent/nodes/${nodeId}/files/write`;
-        await api.post(url, { path: dest, content: b64 });
+        
+        if (isProject) {
+          await api.put(url, { path: dest, content: b64 });
+        } else {
+          await api.post(url, { path: dest, content: b64 });
+        }
         loadFiles(currentPath);
       } catch (err: any) {
         alert(err.response?.data?.message || 'Falha no upload.');

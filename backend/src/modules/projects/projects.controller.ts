@@ -10,7 +10,11 @@ import {
   writeProjectFile,
   copyProjectFile,
   deleteProjectFile,
+  moveProjectFile,
+  startContainerLogs,
+  stopContainerLogs,
 } from '../../services/agent-ws.service';
+import { aiService } from '../../services/ai.service';
 
 export async function listProjects(req: Request, res: Response, next: NextFunction) {
   try {
@@ -178,6 +182,73 @@ export async function deleteFile(req: Request<{ id: string }>, res: Response, ne
     }
     await deleteProjectFile(project.nodeId!, imageName, filePath);
     res.json({ status: 'success', message: 'Arquivo excluído' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function moveFile(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    const { path: filePath, dest: destPath } = req.body;
+    if (!filePath || !destPath) {
+      res.status(400).json({ status: 'error', message: 'path and dest are required' });
+      return;
+    }
+    await moveProjectFile(project.nodeId!, imageName, filePath, destPath);
+    res.json({ status: 'success', message: 'Arquivo movido' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function analyzeProject(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    
+    // 1. Get file list
+    const entries = await listProjectFiles(project.nodeId!, imageName, '');
+    const files = entries.map(e => e.path);
+
+    // 2. Read key files
+    const keyFiles = ['package.json', 'go.mod', 'Dockerfile', '.env.example', 'requirements.txt', 'pom.xml', 'docker-compose.yml'];
+    const fileContents: Record<string, string> = {};
+
+    for (const f of keyFiles) {
+      // Check if file exists in the flat list
+      const exists = entries.find(e => e.path === f && !e.isDir);
+      if (exists) {
+        try {
+          fileContents[f] = await readProjectFile(project.nodeId!, imageName, f);
+        } catch (e) {
+          // ignore individual read errors
+        }
+      }
+    }
+
+    // 3. AI Analysis
+    const analysis = await aiService.analyzeRepository(files, fileContents);
+    res.json({ status: 'success', data: analysis });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function startLogs(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    startContainerLogs(project.nodeId!, imageName);
+    res.json({ status: 'success', message: 'Log streaming iniciado' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function stopLogs(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const { project, imageName } = await resolveNodeAndImage(req.params.id);
+    stopContainerLogs(project.nodeId!, imageName);
+    res.json({ status: 'success', message: 'Log streaming parado' });
   } catch (error) {
     next(error);
   }

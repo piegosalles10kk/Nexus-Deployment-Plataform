@@ -215,7 +215,7 @@ export async function listNodeFiles(req: Request<{ id: string }>, res: Response,
   try {
     const { id } = req.params;
     const filePath = (req.query.path as string) ?? '';
-    const entries = await listProjectFiles(id, 'host', filePath);
+    const entries = await listProjectFiles(id, '', filePath);
     res.json({ status: 'success', data: { entries } });
   } catch (error) {
     next(error);
@@ -231,7 +231,7 @@ export async function readNodeFile(req: Request<{ id: string }>, res: Response, 
       res.status(400).json({ status: 'error', message: 'path query param required' });
       return;
     }
-    const content = await readProjectFile(id, 'host', filePath);
+    const content = await readProjectFile(id, '', filePath);
     res.json({ status: 'success', data: { content } });
   } catch (error) {
     next(error);
@@ -247,7 +247,7 @@ export async function writeNodeFile(req: Request<{ id: string }>, res: Response,
       res.status(400).json({ status: 'error', message: 'path and content are required' });
       return;
     }
-    await writeProjectFile(id, 'host', filePath, content);
+    await writeProjectFile(id, '', filePath, content);
     res.json({ status: 'success', message: 'File saved' });
   } catch (error) {
     next(error);
@@ -263,7 +263,7 @@ export async function deleteNodeFile(req: Request<{ id: string }>, res: Response
       res.status(400).json({ status: 'error', message: 'path query param required' });
       return;
     }
-    await deleteProjectFile(id, 'host', filePath);
+    await deleteProjectFile(id, '', filePath);
     res.json({ status: 'success', message: 'File deleted' });
   } catch (error) {
     next(error);

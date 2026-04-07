@@ -29,6 +29,12 @@ router.get('/:id/files',         authenticate, projectsController.listFiles);
 router.get('/:id/files/content', authenticate, projectsController.getFileContent);
 router.put('/:id/files/content', authorize('ADM', 'TECNICO'), projectsController.updateFile);
 router.post('/:id/files/copy', authorize('ADM', 'TECNICO'), projectsController.copyFile);
+router.post('/:id/files/move', authorize('ADM', 'TECNICO'), projectsController.moveFile);
 router.delete('/:id/files', authorize('ADM', 'TECNICO'), projectsController.deleteFile);
+
+// AI & Logs
+router.post('/:id/analyze',    authorize('ADM', 'TECNICO'), projectsController.analyzeProject);
+router.post('/:id/logs/start', authorize('ADM', 'TECNICO'), projectsController.startLogs);
+router.post('/:id/logs/stop',  authorize('ADM', 'TECNICO'), projectsController.stopLogs);
 
 export default router;

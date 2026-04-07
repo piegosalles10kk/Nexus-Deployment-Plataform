@@ -35,13 +35,17 @@ func safeAbs(imageName, relPath string) (string, error) {
 		return filepath.Abs(relPath)
 	}
 
-	// Sanitise imageName — strip any path separators so it stays a single dir.
-	clean := filepath.Base(filepath.Clean(imageName))
-	if clean == "." || clean == ".." || clean == "" {
-		return "", fmt.Errorf("invalid imageName")
+	var base string
+	if imageName == "" || imageName == "." || imageName == "/" {
+		base = ProjectsBaseDir
+	} else {
+		// Sanitise imageName — strip any path separators so it stays a single dir.
+		clean := filepath.Base(filepath.Clean(imageName))
+		if clean == "." || clean == ".." || clean == "" {
+			return "", fmt.Errorf("invalid imageName")
+		}
+		base = filepath.Join(ProjectsBaseDir, clean)
 	}
-
-	base := filepath.Join(ProjectsBaseDir, clean)
 
 	// filepath.Join already cleans the path; Join(base, "") == base.
 	target := filepath.Join(base, relPath)

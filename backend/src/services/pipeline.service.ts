@@ -202,23 +202,36 @@ async function runAutomaticDockerPipeline(
   ctx: PipelineContext,
 ): Promise<{ testsPassed?: number; testsTotal?: number }> {
   const imageTag = ctx.projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), '10kk-'));
+  const repoDir = path.join(process.cwd(), 'projects', imageTag);
+  if (!fs.existsSync(path.join(process.cwd(), 'projects'))) {
+    fs.mkdirSync(path.join(process.cwd(), 'projects'), { recursive: true });
+  }
 
   try {
-    // 1. Git clone
-    emitLog(ctx, 'git-clone', `Clonando ${ctx.repoUrl} (branch: ${ctx.branch})…`, 'info');
-    await runCommand(
-      'git',
-      ['clone', '--depth', '1', '--branch', ctx.branch, ctx.repoUrl, '.'],
-      tmpDir,
-      (line) => emitLog(ctx, 'git-clone', line),
-    );
+    // 1. Git clone or update
+    const gitDir = path.join(repoDir, '.git');
+    if (fs.existsSync(gitDir)) {
+      emitLog(ctx, 'git-fetch', `Repo existe, atualizando (branch: ${ctx.branch})…`, 'info');
+      try {
+        await runCommand('git', ['fetch', '--depth', '1', 'origin', ctx.branch], repoDir, (line) => emitLog(ctx, 'git-fetch', line));
+        await runCommand('git', ['reset', '--hard', 'FETCH_HEAD'], repoDir, (line) => emitLog(ctx, 'git-reset', line));
+      } catch (err) {
+        emitLog(ctx, 'git-error', 'Falha ao atualizar, re-clonando…', 'warning');
+        fs.rmSync(repoDir, { recursive: true, force: true });
+        fs.mkdirSync(repoDir, { recursive: true });
+        await runCommand('git', ['clone', '--depth', '1', '--branch', ctx.branch, ctx.repoUrl, '.'], repoDir, (line) => emitLog(ctx, 'git-clone', line));
+      }
+    } else {
+      if (!fs.existsSync(repoDir)) fs.mkdirSync(repoDir, { recursive: true });
+      emitLog(ctx, 'git-clone', `Clonando ${ctx.repoUrl} (branch: ${ctx.branch})…`, 'info');
+      await runCommand('git', ['clone', '--depth', '1', '--branch', ctx.branch, ctx.repoUrl, '.'], repoDir, (line) => emitLog(ctx, 'git-clone', line));
+    }
 
     checkCancelled(ctx);
 
     // 2. Install dependencies
     emitLog(ctx, 'install', 'Instalando dependências…', 'info');
-    await runCommand('npm', ['ci', '--prefer-offline'], tmpDir,
+    await runCommand('npm', ['ci', '--prefer-offline'], repoDir,
       (line) => emitLog(ctx, 'install', line));
 
     checkCancelled(ctx);
@@ -232,7 +245,7 @@ async function runAutomaticDockerPipeline(
       await runCommand(
         'npm',
         ['test', '--', '--passWithNoTests', '--ci'],
-        tmpDir,
+        repoDir,
         (line) => {
           testOutput += line + '\n';
           emitLog(ctx, 'test', line);
@@ -280,7 +293,7 @@ async function runAutomaticDockerPipeline(
     // 6. Docker build
     emitLog(ctx, 'docker-build', `Construindo imagem ${imageTag}…`, 'info');
     await buildImage({
-      context: tmpDir,
+      context: repoDir,
       tag: imageTag,
       onLog: (line) => emitLog(ctx, 'docker-build', line),
     });
@@ -378,7 +391,7 @@ async function runAutomaticDockerPipeline(
 
     return { testsPassed, testsTotal };
   } finally {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    // Persistent repo remains in ./projects
   }
 }
 
